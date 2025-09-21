@@ -53,7 +53,7 @@ class KafkaSSHClient:
         else:
             print("SSH tunnel already running.")
 
-    def consume(self, topic, auto_offset_reset="earliest"):
+    def consume(self, topic="movielog10", auto_offset_reset="earliest"):
         """Consume messages from a Kafka topic."""
         self.ensure_tunnel()
 

@@ -2,6 +2,7 @@ from data_ingestion.kafka_pipeline import KafkaSSHClient
 import os
 from dotenv import load_dotenv
 from kafka.errors import NoBrokersAvailable
+import re
 
 class DataProcessor:
     def __init__(self, kafka_client: KafkaSSHClient):
@@ -9,13 +10,58 @@ class DataProcessor:
 
     def process_data(self, data):
         # Implement your data processing logic here
-        processed_data = data.upper()  # Example processing
+        # is it a movie
+        # Example pattern: 2023-06-01,12345,GET /data/m/6789/10.mpg
+        movie_pattern = r'^([^,]+),([^,]+),GET /data/m/([^/]+)/([^\.]+)\.mpg$'
+        match = re.match(movie_pattern, data)
+        if match:
+            time, userid, movieid, minute = match.groups()
+            # You can process or return this info as needed
+            processed_data = {
+            "type": "movie",
+            "time": time,
+            "userid": userid,
+            "movieid": movieid,
+            "minute": minute
+            }
+        
+        # is it a rating
+        rating_pattern = r'^([^,]+),([^,]+),GET /rate/([^=]+)=([^ ]+)$'
+        match = re.match(rating_pattern, data)
+        if match:
+            time, userid, movieid, rating = match.groups()
+            processed_data = {
+                "type": "rating",
+                "time": time,
+                "userid": userid,
+                "movieid": movieid,
+                "rating": rating
+            }
+        #is it recommendation request
+        recommendation_pattern = r'^([^,]+),([^,]+),recommendation request ([^,]+), status (\d+), result: ([^,]+), ([^,]+)$'
+        match = re.match(recommendation_pattern, data)
+        if match:
+            time, userid, server, status, recommendations, responsetime = match.groups()
+            processed_data = {
+                "type": "recommendation_request",
+                "time": time,
+                "userid": userid,
+                "server": server,
+                "status": status,
+                "recommendations": recommendations,
+                "responsetime": responsetime
+            }
+        print("Done processing data: ", data)
         return processed_data
 
     def run(self):
-        for message in self.kafka_client.consume_messages():
+        for message in self.kafka_client.consume():
             processed_message = self.process_data(message)
-            print(f"Processed Message: {processed_message}")
+
+            for key, value in processed_message.items():
+                print(f"{key}: {value}")
+            print("-" * 40)
+            
             # Further actions can be taken with the processed message
             
             
@@ -34,11 +80,8 @@ if __name__ == "__main__":
     
     while True:
         try:
-            count = 0
-            for message in client.consume("movielog10"):
-                print(message)
-                if count >= 10:
-                    break
+            data_processor = DataProcessor(kafka_client=client)
+            data_processor.run()
         except NoBrokersAvailable:
             print("No Kafka brokers available. Please check your connection and broker settings.")
         except KeyboardInterrupt:
