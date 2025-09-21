@@ -2,9 +2,9 @@
 Ranking logic for the prediction service.
 
 Right now this is a *stub* that always returns a static, safe list.
-This allows you to meet the strict response contract and latency SLO
-while you build real models. Later, replace `recommend_for_user`
-to call your loaded model(s) and remove the static list.
+This allows us to meet the response contract and latency SLO
+while we build real models. Later, replace `recommend_for_user`
+to call our loaded model(s) and remove the static list.
 
 Design notes:
 - Keep networking and I/O out of the request path -> low latency.
@@ -16,7 +16,7 @@ from functools import lru_cache
 from typing import List
 
 # Safe/popular fallback list used for cold start and until models are wired.
-# Replace with something derived from your data once ready.
+# Replace with something derived from our data once ready.
 _COLD_START: List[str] = [
     "TheMatrix1999", "Inception2010", "Alien1979", "Heat1995", "Jaws1975",
     "PulpFiction1994", "Se7en1995", "Gladiator2000", "Casablanca1942", "Psycho1960",
@@ -24,8 +24,8 @@ _COLD_START: List[str] = [
     "TheGodfather1972", "ToyStory1995", "Shrek2001", "TheDarkKnight2008", "InsideOut2015",
 ]
 
-# Example: placeholders for model and ID maps you'll load at process start.
-_MODEL = None          # e.g., your CF/Content/Hybrid model object
+# Example: placeholders for model and ID maps we'll load at process start.
+_MODEL = None          # e.g., our CF/Content/Hybrid model object
 _USER_IDMAP = None     # e.g., mapping from external user_id -> internal index
 _MOVIE_IDMAP = None    # e.g., reverse map from internal index -> external movie_id
 
