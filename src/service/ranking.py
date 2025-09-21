@@ -56,7 +56,7 @@ def recommend_for_user(uid: int, k: int = 20) -> List[str]:
     k = min(int(k), 20)
 
     try:
-        # If you have a model, this is where you'd:
+        # If we have a model, this is where we'd:
         # 1) map `uid` to an internal index (using _USER_IDMAP),
         # 2) get scores/top-K from _MODEL,
         # 3) map internal item IDs back to external movie IDs via _MOVIE_IDMAP,
