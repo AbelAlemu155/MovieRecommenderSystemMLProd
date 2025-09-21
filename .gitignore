@@ -98,3 +98,8 @@ htmlcov/
 # -------------------------
 .DS_Store
 Thumbs.db
+
+# -------------------------
+# Data processing artifacts
+# -------------------------
+src/data_processing/output/
