@@ -15,7 +15,8 @@ requires-python = ">=3.11"
 dependencies = [
   "kafka-python",
   "pandas",
-  "pyarrow"
+  "pyarrow",
+  "dotenv"
 ]
 
 [tool.setuptools]
