@@ -1,6 +1,7 @@
 from data_ingestion.kafka_pipeline import KafkaSSHClient
 import os
 from dotenv import load_dotenv
+from kafka.errors import NoBrokersAvailable
 
 class DataProcessor:
     def __init__(self, kafka_client: KafkaSSHClient):
@@ -30,9 +31,19 @@ if __name__ == "__main__":
     )
 
     # Consume from topic "movielog10"
-    count = 0
-    for message in client.consume("movielog10"):
-        print(message)
-        if count >= 10:
+    
+    while True:
+        try:
+            count = 0
+            for message in client.consume("movielog10"):
+                print(message)
+                if count >= 10:
+                    break
+        except NoBrokersAvailable:
+            print("No Kafka brokers available. Please check your connection and broker settings.")
+        except KeyboardInterrupt:
+            print("Stopping consumption...")
             break
-        count += 1
+        except Exception as e:
+            print(f"An error occurred: {e}")
+         
