@@ -103,3 +103,4 @@ Thumbs.db
 # Data processing artifacts
 # -------------------------
 src/data_processing/output/
+src/data_processing/data_queues/
