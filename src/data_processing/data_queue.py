@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+from dotenv import load_dotenv
 
 class DataQueue:
     def __init__(self):
@@ -8,7 +9,8 @@ class DataQueue:
         self.recommendation_df = pd.DataFrame(columns=["time", "userid", "server", "status", "recommendations", "responsetime"])
         
         # queue_folder 
-        self.queue_folder = "src/data_processing/data_queues/"
+        load_dotenv()
+        self.queue_folder = os.getenv("DATA_QUEUE_DIR", "src/data_processing/data_queues/")
         
         # create folder if not exists
         if not os.path.exists(self.queue_folder):

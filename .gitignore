@@ -104,3 +104,4 @@ Thumbs.db
 # -------------------------
 src/data_processing/output/
 src/data_processing/data_queues/
+src/db/
