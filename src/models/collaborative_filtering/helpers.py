@@ -11,7 +11,7 @@ def compute_similarity(matrix, type='cosine'):
                                index=matrix.index, 
                                columns=matrix.index)
         return sim_df
-    # unimplemented
+    # unimplemented cosine is the default used 
     return None
 
 # recommend popular items
