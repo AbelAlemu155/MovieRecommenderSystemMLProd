@@ -8,3 +8,6 @@ pytz==2025.2
 tzdata==2025.2
 psutil==7.1.0
 schedule==1.2.2
+joblib
+scikit-learn
+scipy
