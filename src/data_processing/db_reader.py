@@ -40,6 +40,15 @@ class DBReader:
             params = [movie_id]
         df = pd.read_sql_query(query, self.conn, params=params)
         return df
+    
+    def get_movies(self, movie_id=None):
+        query = "SELECT * FROM movies"
+        params = []
+        if movie_id is not None:
+            query += " WHERE movie_id = ?"
+            params = [movie_id]
+        df = pd.read_sql_query(query, self.conn, params=params)
+        return df
 
     def close(self):
         self.conn.close()
@@ -51,4 +60,5 @@ if __name__ == "__main__":
     reader = DBReader()
     print(reader.get_watch_history())
     print(reader.get_ratings())
+    print(reader.get_movies())
     reader.close()
