@@ -3,7 +3,6 @@ import sqlite3
 import os
 import glob
 from dotenv import load_dotenv
-from data_processing.db_movie_writer import MovieBuffer
 
 class DBWriter:
     def __init__(self):
