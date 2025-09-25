@@ -23,8 +23,8 @@ from scipy import sparse
 from joblib import dump, load
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from .base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
-from .config import TFIDF_MAX_FEATURES, STOP_WORDS
+from models.content_based.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
+from models.content_based.config import TFIDF_MAX_FEATURES, STOP_WORDS
 
 class ContentModelText(BaseContentRecommender):
     name = "cb_text"
@@ -106,4 +106,4 @@ if __name__ == "__main__":
     print("Model built and artifacts saved.")
     m = load_model()
     print("Model and artifacts loaded.")
-    format_movie_recommendations(m.similar_by_id("harry+potter+and+the+philosophers+stone+2001")[:5])  # should find "harry potter and the chamber of secrets 2002"
+    format_movie_recommendations(m.similar_by_id("minority+report+2002")[:5])  # should find "harry potter and the chamber of secrets 2002"

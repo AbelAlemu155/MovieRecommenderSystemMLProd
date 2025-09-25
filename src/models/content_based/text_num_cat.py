@@ -17,8 +17,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from joblib import dump, load
 
-from .base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
-from .config import (
+from models.content_based.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
+from models.content_based.config import (
     TFIDF_MAX_FEATURES, STOP_WORDS,
     TEXT_WEIGHT, NUM_WEIGHT, CAT_WEIGHT
 )
@@ -160,4 +160,4 @@ if __name__ == "__main__":
     print("Model built and artifacts saved.")
     m = load_model()
     print("Model and artifacts loaded.")
-    format_movie_recommendations(m.similar_by_id("harry+potter+and+the+philosophers+stone+2001")[:5])  # should find "die hard 1988"
+    format_movie_recommendations(m.similar_by_id("minority+report+2002")[:5])  # should find "die hard 1988"
