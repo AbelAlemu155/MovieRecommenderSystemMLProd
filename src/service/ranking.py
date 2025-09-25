@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import List
+import random
 
 _COLD_START: List[str] = [
     "TheMatrix1999","Inception2010","Alien1979","Heat1995","Jaws1975",
@@ -10,7 +11,7 @@ _COLD_START: List[str] = [
 
 @lru_cache(maxsize=100_000)
 def _cached(uid: int, k: int) -> List[str]:
-    return _COLD_START[:k]
+    return random.sample(_COLD_START, k) if k <= len(_COLD_START) else _COLD_START[:k]
 
 def recommend_for_user(uid: int, k: int = 20) -> List[str]:
     k = min(int(k), 20)
