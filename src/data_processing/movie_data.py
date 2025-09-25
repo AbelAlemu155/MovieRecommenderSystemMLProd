@@ -33,6 +33,11 @@ class MovieDataProcessor:
         if isinstance(origin_countries, list):
             return ",".join([str(country) for country in origin_countries])
         return origin_countries
+    
+    def _format_belongs_to_collection(self, belongs_to_collection):
+        if isinstance(belongs_to_collection, dict):
+            return str(belongs_to_collection.get("id", ""))
+        return belongs_to_collection
 
     def fetch_movie_details(self):
         # Simulate fetching movie details from an external API
@@ -47,6 +52,9 @@ class MovieDataProcessor:
         movie_details['genres'] = self._format_genres(movie_details.get('genres', ''))
         movie_details['spoken_languages'] = self._format_spoken_languages(movie_details.get('spoken_languages', ''))
         movie_details['production_companies'] = self._format_production_companies(movie_details.get('production_companies', ''))
+        movie_details['production_countries'] = self._format_production_countries(movie_details.get('production_countries', ''))
+        movie_details['belongs_to_collection'] = self._format_belongs_to_collection(movie_details.get('belongs_to_collection', ''))
+        
         return {key: movie_details.get(key) for key in keys}
     
     def fetch_movie_details_imdb(self):
@@ -78,6 +86,7 @@ class MovieDataProcessor:
             tmdb_details['production_companies'] = self._format_production_companies(tmdb_details.get('production_companies', ''))  
             tmdb_details['production_countries'] = self._format_production_countries(tmdb_details.get('production_countries', ''))
             tmdb_details['origin_country'] = self._format_origin_countries(tmdb_details.get('origin_country', ''))
+            tmdb_details['belongs_to_collection'] = self._format_belongs_to_collection(tmdb_details.get('belongs_to_collection', ''))
         else:
             print(f"Failed to fetch TMDB details: {response.status_code}")
             print(response.text)

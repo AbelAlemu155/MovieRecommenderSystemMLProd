@@ -3,6 +3,7 @@ import sqlite3
 import os
 import glob
 from dotenv import load_dotenv
+from data_processing.db_movie_writer import MovieBuffer
 
 class DBWriter:
     def __init__(self):
@@ -15,6 +16,7 @@ class DBWriter:
         
         self.conn = sqlite3.connect(self.db_path)
         self._create_tables()
+        
 
     def _create_tables(self):
         cursor = self.conn.cursor()
@@ -171,19 +173,23 @@ class DBWriter:
                 row['rated_at']
             ))
         self.conn.commit()
-
+    
     def process_files(self):
         all_files = glob.glob(os.path.join(self.data_dir, "*.csv"))
+        
+        
         for file in all_files:
             print(f"Processing {file}")
+            
+            df = pd.read_csv(file)
+
+            
             if 'movies' in file:
-                df = pd.read_csv(file)
                 grouped = df.groupby(['userid', 'movieid']).agg({'minute': 'count', 'time': ['min', 'max']}).reset_index()
                 grouped.columns = ['userid', 'movieid', 'minute', 'start_time', 'last_watch']
                 self.update_watch_history(grouped)
                 os.remove(file)
-            elif 'ratings' in file:
-                df = pd.read_csv(file)
+            elif 'ratings' in file:                
                 grouped = df.groupby(['userid', 'movieid']).agg({'time': 'max', 'rating': 'max'}).reset_index()
                 grouped.columns = ['userid', 'movieid', 'rated_at', 'rating']
                 self.update_ratings(grouped)
