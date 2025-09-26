@@ -15,6 +15,7 @@ class DBWriter:
         
         self.conn = sqlite3.connect(self.db_path)
         self._create_tables()
+        
 
     def _create_tables(self):
         cursor = self.conn.cursor()
@@ -37,6 +38,93 @@ class DBWriter:
                 PRIMARY KEY (user_id, movie_id)
             )
         ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS movies (
+            movie_id TEXT PRIMARY KEY,
+            tmdb_id TEXT,
+            imdb_id TEXT,
+            adult BOOLEAN,
+            genres TEXT,
+            overview TEXT,
+            original_language TEXT,
+            popularity REAL,
+            production_companies TEXT,
+            release_date TEXT,
+            revenue INTEGER,
+            budget INTEGER,
+            runtime INTEGER,
+            spoken_languages TEXT,
+            belongs_to_collection TEXT,
+            vote_average REAL,
+            vote_count INTEGER,
+            video BOOLEAN,
+            title TEXT,
+            production_countries TEXT,
+            status TEXT,
+            tagline TEXT
+            )
+        ''')
+        
+        self.conn.commit()
+
+    def insert_or_update_movie(self, movie_data):
+        cursor = self.conn.cursor()
+        
+        query = f"""
+            INSERT INTO movies (movie_id, tmdb_id, imdb_id, adult, genres, overview, original_language, popularity,
+                                production_companies, release_date, revenue, budget, runtime, spoken_languages,
+                                belongs_to_collection, vote_average, vote_count, video, title, production_countries,
+                                status, tagline)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(movie_id) DO UPDATE SET
+                tmdb_id = excluded.tmdb_id,
+                imdb_id = excluded.imdb_id,
+                adult = excluded.adult,
+                genres = excluded.genres,
+                overview = excluded.overview,
+                original_language = excluded.original_language,
+                popularity = excluded.popularity,
+                production_companies = excluded.production_companies,
+                release_date = excluded.release_date,
+                revenue = excluded.revenue,
+                budget = excluded.budget,
+                runtime = excluded.runtime,
+                spoken_languages = excluded.spoken_languages,
+                belongs_to_collection = excluded.belongs_to_collection,
+                vote_average = excluded.vote_average,
+                vote_count = excluded.vote_count,
+                video = excluded.video,
+                title = excluded.title,
+                production_countries = excluded.production_countries,
+                status = excluded.status,
+                tagline = excluded.tagline
+            WHERE movies.movie_id = excluded.movie_id;
+        """
+        cursor.execute(query, (
+            movie_data['movie_id'],
+            movie_data['tmdb_id'],
+            movie_data['imdb_id'],
+            movie_data['adult'],
+            movie_data['genres'],
+            movie_data['overview'],
+            movie_data['original_language'],
+            movie_data['popularity'],
+            movie_data['production_companies'],
+            movie_data['release_date'],
+            movie_data['revenue'],
+            movie_data['budget'],
+            movie_data['runtime'],
+            movie_data['spoken_languages'],
+            movie_data['belongs_to_collection'],
+            movie_data['vote_average'],
+            movie_data['vote_count'],
+            movie_data['video'],
+            movie_data['title'],
+            movie_data['production_countries'],
+            movie_data['status'],
+            movie_data['tagline']
+        ))
         self.conn.commit()
 
     def update_watch_history(self, data):
@@ -64,6 +152,8 @@ class DBWriter:
                 row['last_watch']
             ))
         self.conn.commit()
+        
+        
 
     def update_ratings(self, data):
         cursor = self.conn.cursor()
@@ -82,19 +172,23 @@ class DBWriter:
                 row['rated_at']
             ))
         self.conn.commit()
-
+    
     def process_files(self):
         all_files = glob.glob(os.path.join(self.data_dir, "*.csv"))
+        
+        
         for file in all_files:
             print(f"Processing {file}")
+            
+            df = pd.read_csv(file)
+
+            
             if 'movies' in file:
-                df = pd.read_csv(file)
                 grouped = df.groupby(['userid', 'movieid']).agg({'minute': 'count', 'time': ['min', 'max']}).reset_index()
                 grouped.columns = ['userid', 'movieid', 'minute', 'start_time', 'last_watch']
                 self.update_watch_history(grouped)
                 os.remove(file)
-            elif 'ratings' in file:
-                df = pd.read_csv(file)
+            elif 'ratings' in file:                
                 grouped = df.groupby(['userid', 'movieid']).agg({'time': 'max', 'rating': 'max'}).reset_index()
                 grouped.columns = ['userid', 'movieid', 'rated_at', 'rating']
                 self.update_ratings(grouped)
