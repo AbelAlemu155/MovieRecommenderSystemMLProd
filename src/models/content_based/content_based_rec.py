@@ -11,19 +11,13 @@ CLI printing behavior:
 Examples:
   Train and save:
     # add imports at top of file:
-    from models.content_based.content_based_rec import ContentBasedRecommender, Settings, _load_sqlite
+    from src.models.content_based.content_based_rec import ContentBasedRecommender
 
     # in api call:
-    db_path = "src/db/home_alone.db" 
-    table = "movies"
-    save_path = "src/models/content_based/artifacts/model.joblib"
-    settings = Settings()
-    df = _load_sqlite(db_path, table=table)
-    rec = ContentBasedRecommender(settings=settings).train(df)
-    rec.save(save_path)
+    ContentBasedRecommender().train()
 
   Recommend from a user_id:
-    recommended = ContentBasedRecommender().recommend(user_id=int(userid), k=20)
+    ContentBasedRecommender().recommend(user_id=int(userid), k=20)
 """
 from __future__ import annotations
 
@@ -43,6 +37,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 from dataclasses import asdict
+
+from models.base_model import Recommender   #import Recommender base class
 
 
 load_dotenv()  # take environment variables from .env file
@@ -121,6 +117,7 @@ def latest_movie_for_user(user_id: str | int) -> Optional[str]:
 # ---------------------------- helpers ----------------------------
 
 def _as_list(x):
+    """Ensure x is a list. If str, split on commas."""
     if isinstance(x, list):
         return x
     if isinstance(x, str):
@@ -184,6 +181,7 @@ def _numeric_block(df: pd.DataFrame) -> np.ndarray:
 
 @dataclass
 class Settings:
+    """Settings for ContentBasedRecommender."""
     embed_model_name: str = "all-MiniLM-L6-v2"  # 384-dim, fast & light
     embed_weight: float = 0.6
     genre_weight: float = 0.3
@@ -191,7 +189,7 @@ class Settings:
     genre_tfidf_max_features: int = 64
 
 
-class ContentBasedRecommender:
+class ContentBasedRecommender(Recommender):
     def __init__(self, settings: Settings | None = None, n_neighbors: int = 50):
         self.settings = settings or Settings()
         self.n_neighbors = n_neighbors
@@ -210,7 +208,7 @@ class ContentBasedRecommender:
         self.row_of = None   # movie_id -> row index
 
     # ---- training ----
-    def train(self, df: pd.DataFrame):
+    def train_model(self, df: pd.DataFrame):
         if not _SENTENCE_TRANSFORMERS_AVAILABLE:
             raise RuntimeError(
                 "sentence-transformers not installed. pip install sentence-transformers")
@@ -267,8 +265,22 @@ class ContentBasedRecommender:
         self.nn.fit(self.X)
         return self
 
+    def train(self):
+        """
+        Wrapper for train_model() to match other models' API.
+        It trains and saves the model in one step.
+        """
+        db_path = "src/db/home_alone.db" 
+        table = "movies"
+        save_path = "src/models/content_based/artifacts/model.joblib"
+        settings = Settings()
+        df = _load_sqlite(db_path, table=table)
+        rec = ContentBasedRecommender(settings=settings).train_model(df)
+        return rec.save(save_path)
+
     # ---- recommend ----
     def _recommend_from_row(self, row: int, k: int) -> List[Tuple[str, float]]:
+        """Recommend K similar movies given a row index."""
         distances, indices = self.nn.kneighbors(
             self.X[row], n_neighbors=min(k + 1, len(self.df)))
         idxs = indices[0].tolist()
@@ -334,6 +346,7 @@ class ContentBasedRecommender:
     _cached_model = None  # singleton for get_loaded()
     @classmethod
     def get_loaded(cls, path: str):
+        """Load and cache a single model instance from path."""
         if cls._cached_model is None:
             cls._cached_model = cls.load(path)
         return cls._cached_model
@@ -366,6 +379,9 @@ class ContentBasedRecommender:
 # ---------------------------- data loading ----------------------------
 
 def _load_sqlite(db_path: str, table: str = "movies") -> pd.DataFrame:
+    """
+    Load movie metadata from a SQLite database table.
+    """
     sql = build_sql_select(table)
     conn = sqlite3.connect(db_path)
     try:
