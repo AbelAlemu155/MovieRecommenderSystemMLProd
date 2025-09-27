@@ -19,6 +19,7 @@ __pycache__/
 .venv/
 venv/
 env/
+*env/
 
 # -------------------------
 # Data folders (large/raw/generated)
@@ -98,3 +99,10 @@ htmlcov/
 # -------------------------
 .DS_Store
 Thumbs.db
+
+# -------------------------
+# Data processing artifacts
+# -------------------------
+src/data_processing/output/
+src/data_processing/data_queues/
+src/db/
