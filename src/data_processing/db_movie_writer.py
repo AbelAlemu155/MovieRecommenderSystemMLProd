@@ -4,6 +4,7 @@ import sqlite3
 from dotenv import load_dotenv
 import glob
 from data_processing.movie_data import MovieDataProcessor
+import time
 
 class MovieDBWriter:
     
@@ -33,7 +34,14 @@ class MovieDBWriter:
             df_existing = pd.read_csv(cache_file)
             df = pd.concat([df_existing, df]).drop_duplicates().reset_index(drop=True)
         df.to_csv(cache_file, index=False)
-        
+    
+    def movie_id_in_cache(self, movie_id):
+        cache_file = os.path.join(self.cache_dir, 'movieids.csv')
+        if not os.path.exists(cache_file):
+            return False
+        df = pd.read_csv(cache_file)
+        return movie_id in df['movie_id'].values
+    
     def _create_tables(self):
         cursor = self.conn.cursor()
        
@@ -77,6 +85,9 @@ class MovieDBWriter:
                 movie_ids = df['movie_id'].unique().tolist()
                 print(f"Found {len(movie_ids)} unique movie IDs.")
                 for movie_id in movie_ids:
+                    if self.movie_id_in_cache(movie_id):
+                        print(f"Skipping cached movie ID: {movie_id}")
+                        continue
                     processor = MovieDataProcessor(movie_id)
                     movie_details = processor.fetch_movie_details()
                     # print("---Movie Details---")
@@ -98,7 +109,8 @@ class MovieDBWriter:
                     print(f"cached movie ID: {movie_id}")
                 print(f"Finished processing {file}")
                 os.remove(file)
-                break
+                # wait for 15 seconds before processing the next file
+                # time.sleep(15)
 
         print("All files processed.")
     

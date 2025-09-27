@@ -1,18 +1,29 @@
 """
 Simplified, maintainable content-based movie recommender (SQLite + Semantic Embeddings).
 
-Upgrades in this version:
-- Replaces TF-IDF text with SentenceTransformer embeddings for `overview + tagline` (true semantic signal).
-- Keeps genres (light TF-IDF over genre tokens) and numerics (runtime, popularity, vote stats) as small guiding features.
-- Preserves the same public API: train(df), save(path), load(path), recommend(movie_id, k).
-- Reads directly from SQLite (default table: 'movies').
+Now supports recommending for a *user_id* by looking up the user's latest watched movie
+from the SQLite 'watch_history' table, then recommending similar titles to that movie.
 
-Usage:
-    # Training and saving
-    python simplified_recommender.py --db path/to/movies.db --table movies --save path/to/model.joblib --embed_model all-MiniLM-L6-v2
-    # Loading and recommending
-    python simplified_recommender.py --model path/to/model.joblib --movie_id "movie_id_here" --topk 20
+What's inside (unchanged core features):
+- SentenceTransformer embeddings for `overview + tagline` (true semantic signal).
+- Light genres TF-IDF and a tiny numeric block (runtime, popularity, vote stats).
+- Public API: train(df), save(path), load(path), recommend(movie_id, k),
+  and NEW: recommend_for_user(user_id, k, db_path, watch_table='watch_history').
 
+CLI printing behavior:
+- When you request recommendations (by movie_id OR user_id), stdout prints a single line:
+  a comma-separated list of recommended movie_id values. No extra text.
+
+Examples:
+  # Train and save
+  python simplified_recommender.py --db src/db/home_alone.db --table movies --save model.joblib
+
+  # Load and recommend by movie_id
+  python simplified_recommender.py --model model.joblib --movie_id "titanic+1997" --topk 20
+
+  # Load and recommend by user_id (reads latest movie from watch_history)
+  python simplified_recommender.py --model model.joblib --db src/db/home_alone.db \
+    --user_id 2432 --watch_table watch_history --topk 20
 """
 from __future__ import annotations
 
@@ -42,10 +53,9 @@ except Exception:  # pragma: no cover
     _SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 
-# ---------------------------- SQL ----------------------------
+# ---------------------------- SQL helpers ----------------------------
 
 def build_sql_select(table_name: str) -> str:
-    # Your exact column list, parameterized for the table name
     return f"""
 SELECT
     movie_id, tmdb_id, imdb_id, adult, genres, overview,
@@ -55,6 +65,35 @@ SELECT
     title, production_countries, status, tagline
 FROM {table_name}
 """
+
+
+def latest_movie_for_user(user_id: str | int) -> Optional[str]:
+    """
+    Look up the most recently watched movie for a given user_id.
+    Prefers last_watch DESC, then start_time DESC.
+    Returns the movie_id string or None if not found.
+    """
+
+    db_path = os.getenv("DB_PATH")
+    watch_table = "watch_history"
+
+    q = f"""
+    SELECT movie_id
+    FROM {watch_table}
+    WHERE user_id = ?
+    ORDER BY
+        COALESCE(last_watch, '') DESC,
+        COALESCE(start_time, '') DESC
+    LIMIT 1
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(q, (str(user_id),))
+        row = cur.fetchone()
+        return str(row[0]) if row and row[0] is not None else None
+    finally:
+        conn.close()
 
 
 # ---------------------------- helpers ----------------------------
@@ -123,13 +162,10 @@ def _numeric_block(df: pd.DataFrame) -> np.ndarray:
 
 @dataclass
 class Settings:
-    # Embedding model
     embed_model_name: str = "all-MiniLM-L6-v2"  # 384-dim, fast & light
-    # Feature weights in the concatenated space
     embed_weight: float = 0.6
     genre_weight: float = 0.3
     num_weight: float = 0.1
-    # Genre vectorizer size (small; only a few genre tokens anyway)
     genre_tfidf_max_features: int = 64
 
 
@@ -164,13 +200,11 @@ class SimpleContentRecommender:
 
         # 1) Semantic embeddings for overview+tagline
         model = SentenceTransformer(self.settings.embed_model_name)
-        # normalize_embeddings=True makes cosine ~ dot; still fine with NearestNeighbors(cosine)
         E = model.encode(
             self.df["_embed_text"].tolist(),
             show_progress_bar=False,
             normalize_embeddings=True,
         )
-        # to csr for hstack compatibility
         self._E = sparse.csr_matrix(E)
 
         # 2) Genres as tiny TF-IDF
@@ -218,6 +252,7 @@ class SimpleContentRecommender:
         idxs = indices[0].tolist()
         dists = distances[0].tolist()
 
+        # remove self
         if row in idxs:
             j = idxs.index(row)
             idxs.pop(j)
@@ -230,20 +265,28 @@ class SimpleContentRecommender:
         ids = [str(self.df.iloc[i]["movie_id"]) for i in idxs]
         return list(zip(ids, sims))
 
-    def recommend(self, movie_id: str, k: int = 10) -> List[Tuple[str, float]]:
+    def get_similar_movies(self, movie_id: str, k: int = 20) -> List[Tuple[str, float]]:
         """Recommend K similar movies given a movie_id."""
         row = self.row_of.get(str(movie_id))
         if row is None:
             raise KeyError(f"movie_id '{movie_id}' not found")
         return self._recommend_from_row(row, k)
 
+    def recommend(self, user_id: str | int, k: int) -> List[str]:
+        """
+        Look up the user's latest watched movie from watch_history, then recommend.
+        """
+        latest_mid = latest_movie_for_user(user_id=user_id)
+        if not latest_mid:
+            raise ValueError(f"No watch history found for user_id '{user_id}' in table'.")
+        returned_pairs = self.get_similar_movies(latest_mid, k=k)
+        returned_movies = [id for id, _ in returned_pairs]
+        print(returned_pairs)
+        return returned_movies
+
     # ---- persistence ----
     def save(self, path: str):
-        """Save model + artifacts to a single joblib file.
-        Note: We store the embed model **name**, not the heavy model object. The saved
-        recommender can be loaded for inference without re-embedding since X is saved.
-        For re-training, the same model name will be used to load a fresh embedder.
-        """
+        """Save model + artifacts to a single joblib file."""
         try:
             import joblib
         except Exception as e:
@@ -280,7 +323,6 @@ class SimpleContentRecommender:
         obj.df = payload["df"]
         obj.row_of = payload["row_of"] or ({mid: i for i, mid in enumerate(
             obj.df["movie_id"].tolist())} if obj.df is not None else None)
-        # Internal caches (not needed for inference)
         obj._E = None
         obj._X_genre = None
         obj._X_num = None
@@ -297,17 +339,14 @@ def _load_sqlite(db_path: str, table: str = "movies") -> pd.DataFrame:
     finally:
         conn.close()
 
-    # Ensure expected columns exist
     required = ["movie_id", "title", "overview", "tagline", "genres"]
     for col in required:
         if col not in df.columns:
             raise ValueError(f"SQLite table must include column '{col}'")
 
-    # Normalize types
     df["movie_id"] = df["movie_id"].astype(str)
     df["genres"] = df["genres"].apply(_maybe_json_list)
 
-    # Optional numeric columns may be missing; that's fine
     for col in ["runtime", "popularity", "vote_average", "vote_count"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -317,15 +356,21 @@ def _load_sqlite(db_path: str, table: str = "movies") -> pd.DataFrame:
 
 # ---------------------------- CLI ----------------------------
 
+def _print_csv_movie_ids(pairs: List[Tuple[str, float]]):
+    """Print only a comma-separated list of movie_id values to stdout."""
+    ids = [mid for (mid, _s) in pairs]
+    print(",".join(ids))
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--db", default=(os.getenv("DB_PATH", "src/db/home_alone.db")),
-                   help="Path to SQLite database (e.g., home_alone.db)")
+                   help="Path to SQLite database that has both 'movies' and 'watch_history' (e.g., home_alone.db)")
     p.add_argument("--table", default="movies",
-                   help="Table name (default: movies)")
-    p.add_argument("--movie_id", default=None)
-    p.add_argument("--topk", type=int, default=20,
-                   help="Number of recommendations to return (default: 10)")
+                   help="Movies table name (default: movies)")
+    p.add_argument("--watch_table", default="watch_history",
+                   help="Watch history table name (default: watch_history)")
+    p.add_argument("--user_id", default=None, help="If provided, we lookup the latest movie for this user and recommend from it")
     p.add_argument("--save", default=None,
                    help="Optional path to save a trained model (e.g., model.joblib)")
     p.add_argument("--model", default=None,
@@ -334,6 +379,7 @@ def main():
                    help="Override embedding model name (default: all-MiniLM-L6-v2)")
     args = p.parse_args()
 
+    # Load or train
     if args.model:
         rec = SimpleContentRecommender.load(args.model)
     else:
@@ -347,25 +393,15 @@ def main():
         if args.save:
             rec.save(args.save)
 
-    if not args.movie_id:
-        raise SystemExit("Provide --movie_id for recommendation")
+    # Determine seed
+    pairs: List[Tuple[str, float]]
+    if args.user_id is not None:
+        if not args.db:
+            raise SystemExit("--db is required when using --user_id")
+        pairs = rec.recommend(user_id=args.user_id)
+    else:
+        raise SystemExit("Provide either --user_id for recommendation")
 
-    pairs = rec.recommend(args.movie_id, k=args.topk)
-
-    # pretty print
-    inv = {mid: i for i, mid in enumerate(rec.df["movie_id"])}
-    for i, (mid, s) in enumerate(pairs, start=1):
-        row = rec.df.iloc[inv[mid]]
-        year = ""
-        if "release_date" in rec.df.columns:
-            try:
-                rd = str(row.get("release_date", ""))
-                if rd:
-                    year = rd[:4]
-            except Exception:
-                pass
-        title = f"{row['title']} ({year})".strip()
-        print(f"{i:2d}. {title:<50} - Similarity: {s:.3f}")
 
 
 if __name__ == "__main__":
