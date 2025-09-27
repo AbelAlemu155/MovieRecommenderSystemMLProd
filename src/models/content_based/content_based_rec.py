@@ -1,29 +1,25 @@
 """
-Simplified, maintainable content-based movie recommender (SQLite + Semantic Embeddings).
-
-Now supports recommending for a *user_id* by looking up the user's latest watched movie
-from the SQLite 'watch_history' table, then recommending similar titles to that movie.
-
-What's inside (unchanged core features):
+Core features: Content-based recommender using movie metadata only.
 - SentenceTransformer embeddings for `overview + tagline` (true semantic signal).
 - Light genres TF-IDF and a tiny numeric block (runtime, popularity, vote stats).
 - Public API: train(df), save(path), load(path), recommend(movie_id, k),
-  and NEW: recommend_for_user(user_id, k, db_path, watch_table='watch_history').
 
 CLI printing behavior:
-- When you request recommendations (by movie_id OR user_id), stdout prints a single line:
+- When you request recommendations (by user_id), stdout prints a single line:
   a comma-separated list of recommended movie_id values. No extra text.
 
 Examples:
-  # Train and save
-  python simplified_recommender.py --db src/db/home_alone.db --table movies --save model.joblib
+  Train and save:
+    db_path = "src/db/home_alone.db" 
+    table = "movies"
+    save_path = "src/models/content_based/artifacts/model.joblib"
+    settings = Settings()
+    df = _load_sqlite(db_path, table=table)
+    rec = ContentBasedRecommender(settings=settings).train(df)
+    rec.save(save_path)
 
-  # Load and recommend by movie_id
-  python simplified_recommender.py --model model.joblib --movie_id "titanic+1997" --topk 20
-
-  # Load and recommend by user_id (reads latest movie from watch_history)
-  python simplified_recommender.py --model model.joblib --db src/db/home_alone.db \
-    --user_id 2432 --watch_table watch_history --topk 20
+  Recommend from a user_id:
+    recommended = ContentBasedRecommender().recommend(user_id=int(userid), k=20)
 """
 from __future__ import annotations
 
@@ -42,6 +38,8 @@ from scipy import sparse
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
+from dataclasses import asdict
+
 
 load_dotenv()  # take environment variables from .env file
 
@@ -51,6 +49,26 @@ try:
     from sentence_transformers import SentenceTransformer
 except Exception:  # pragma: no cover
     _SENTENCE_TRANSFORMERS_AVAILABLE = False
+
+
+#  ----------------------   CUSTOM EXCEPTIONS   ----------------------
+class NoUserFound(LookupError):
+    """Raised when a user has no watch history."""
+
+    def __init__(self, user_id, message=None):
+        if message is None:
+            message = f"No watch history found for user_id '{user_id}'."
+        super().__init__(message)
+        self.user_id = user_id
+
+class MovieNotFound(LookupError):
+    """Raised when a movie_id is not found in the data."""
+
+    def __init__(self, movie_id, message=None):
+        if message is None:
+            message = f"movie_id '{movie_id}' not found in the data."
+        super().__init__(message)
+        self.movie_id = movie_id
 
 
 # ---------------------------- SQL helpers ----------------------------
@@ -169,7 +187,7 @@ class Settings:
     genre_tfidf_max_features: int = 64
 
 
-class SimpleContentRecommender:
+class ContentBasedRecommender:
     def __init__(self, settings: Settings | None = None, n_neighbors: int = 50):
         self.settings = settings or Settings()
         self.n_neighbors = n_neighbors
@@ -269,19 +287,24 @@ class SimpleContentRecommender:
         """Recommend K similar movies given a movie_id."""
         row = self.row_of.get(str(movie_id))
         if row is None:
-            raise KeyError(f"movie_id '{movie_id}' not found")
+            raise MovieNotFound(movie_id)
         return self._recommend_from_row(row, k)
 
     def recommend(self, user_id: str | int, k: int = 20) -> List[str]:
         """
         Look up the user's latest watched movie from watch_history, then recommend.
         """
+
+        # load the model path from environment variable or default
+        model_path = os.getenv("CB_MODEL_DIR", "src/models/content_based/artifacts/model.joblib")
+        m = ContentBasedRecommender.get_loaded(model_path)
+
+        # get the latest movie for the user
         latest_mid = latest_movie_for_user(user_id=user_id)
         if not latest_mid:
-            raise ValueError(f"No watch history found for user_id '{user_id}' in table'.")
-        returned_pairs = self.get_similar_movies(latest_mid, k=k)
+            raise NoUserFound(user_id)
+        returned_pairs = m.get_similar_movies(latest_mid, k=k)
         returned_movies = [id for id, _ in returned_pairs]
-        print(returned_pairs)
         return returned_movies
 
     # ---- persistence ----
@@ -293,7 +316,7 @@ class SimpleContentRecommender:
             raise RuntimeError(
                 "joblib is required for save/load. pip install joblib") from e
         payload = {
-            "settings": self.settings,
+            "settings_dict": asdict(self.settings),
             "n_neighbors": self.n_neighbors,
             "embed_model_name": self.embed_model_name,
             "genre_vectorizer": self.genre_vectorizer,
@@ -304,8 +327,15 @@ class SimpleContentRecommender:
         }
         joblib.dump(payload, path)
 
+    _cached_model = None  # singleton for get_loaded()
     @classmethod
-    def load(cls, path: str) -> "SimpleContentRecommender":
+    def get_loaded(cls, path: str):
+        if cls._cached_model is None:
+            cls._cached_model = cls.load(path)
+        return cls._cached_model
+
+    @classmethod
+    def load(cls, path: str) -> "ContentBasedRecommender":
         """Load a previously saved recommender."""
         try:
             import joblib
@@ -313,8 +343,8 @@ class SimpleContentRecommender:
             raise RuntimeError(
                 "joblib is required for save/load. pip install joblib") from e
         payload = joblib.load(path)
-        obj = cls(settings=payload.get("settings"),
-                  n_neighbors=payload.get("n_neighbors", 50))
+        settings = Settings(**payload["settings_dict"])
+        obj = cls(settings=settings, n_neighbors=payload.get("n_neighbors", 50))
         obj.embed_model_name = payload.get(
             "embed_model_name", obj.settings.embed_model_name)
         obj.genre_vectorizer = payload.get("genre_vectorizer")
@@ -356,53 +386,46 @@ def _load_sqlite(db_path: str, table: str = "movies") -> pd.DataFrame:
 
 # ---------------------------- CLI ----------------------------
 
-def _print_csv_movie_ids(pairs: List[Tuple[str, float]]):
-    """Print only a comma-separated list of movie_id values to stdout."""
-    ids = [mid for (mid, _s) in pairs]
-    print(",".join(ids))
+# def main():
+#     p = argparse.ArgumentParser()
+#     p.add_argument("--db", default=(os.getenv("DB_PATH", "src/db/home_alone.db")),
+#                    help="Path to SQLite database that has both 'movies' and 'watch_history' (e.g., home_alone.db)")
+#     p.add_argument("--table", default="movies",
+#                    help="Movies table name (default: movies)")
+#     p.add_argument("--watch_table", default="watch_history",
+#                    help="Watch history table name (default: watch_history)")
+#     p.add_argument("--user_id", default=None, help="If provided, we lookup the latest movie for this user and recommend from it")
+#     p.add_argument("--save", default=None,
+#                    help="Optional path to save a trained model (e.g., model.joblib)")
+#     p.add_argument("--model", default=None,
+#                    help="Optional path to a saved model to load (skips training)")
+#     p.add_argument("--embed_model", default=None,
+#                    help="Override embedding model name (default: all-MiniLM-L6-v2)")
+#     args = p.parse_args()
+
+#     # Load or train
+#     if args.model:
+#         rec = ContentBasedRecommender.load(args.model)
+#     else:
+#         if not args.db:
+#             raise SystemExit("--db is required when not using --model")
+#         settings = Settings()
+#         if args.embed_model:
+#             settings.embed_model_name = args.embed_model
+#         df = _load_sqlite(args.db, table=args.table)
+#         rec = ContentBasedRecommender(settings=settings).train(df)
+#         if args.save:
+#             rec.save(args.save)
+
+#     # Determine seed
+#     pairs: List[Tuple[str, float]]
+#     if args.user_id is not None:
+#         if not args.db:
+#             raise SystemExit("--db is required when using --user_id")
+#         pairs = rec.recommend(user_id=args.user_id)
+#     else:
+#         raise SystemExit("Provide either --user_id for recommendation")
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--db", default=(os.getenv("DB_PATH", "src/db/home_alone.db")),
-                   help="Path to SQLite database that has both 'movies' and 'watch_history' (e.g., home_alone.db)")
-    p.add_argument("--table", default="movies",
-                   help="Movies table name (default: movies)")
-    p.add_argument("--watch_table", default="watch_history",
-                   help="Watch history table name (default: watch_history)")
-    p.add_argument("--user_id", default=None, help="If provided, we lookup the latest movie for this user and recommend from it")
-    p.add_argument("--save", default=None,
-                   help="Optional path to save a trained model (e.g., model.joblib)")
-    p.add_argument("--model", default=None,
-                   help="Optional path to a saved model to load (skips training)")
-    p.add_argument("--embed_model", default=None,
-                   help="Override embedding model name (default: all-MiniLM-L6-v2)")
-    args = p.parse_args()
-
-    # Load or train
-    if args.model:
-        rec = SimpleContentRecommender.load(args.model)
-    else:
-        if not args.db:
-            raise SystemExit("--db is required when not using --model")
-        settings = Settings()
-        if args.embed_model:
-            settings.embed_model_name = args.embed_model
-        df = _load_sqlite(args.db, table=args.table)
-        rec = SimpleContentRecommender(settings=settings).train(df)
-        if args.save:
-            rec.save(args.save)
-
-    # Determine seed
-    pairs: List[Tuple[str, float]]
-    if args.user_id is not None:
-        if not args.db:
-            raise SystemExit("--db is required when using --user_id")
-        pairs = rec.recommend(user_id=args.user_id)
-    else:
-        raise SystemExit("Provide either --user_id for recommendation")
-
-
-
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

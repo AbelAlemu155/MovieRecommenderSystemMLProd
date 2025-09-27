@@ -6,7 +6,6 @@ Faker==37.8.0
 filelock==3.19.1
 fsspec==2025.9.0
 hf-xet==1.1.10
--e git+https://github.com/cmu-seai/group-project-f25-home-alone.git@5b8e61ce0219e9ca814e40e1d96652c31e484a2e#egg=home_alone
 huggingface-hub==0.35.1
 idna==3.10
 Jinja2==3.1.6
@@ -41,3 +40,5 @@ transformers==4.56.2
 typing_extensions==4.15.0
 tzdata==2025.2
 urllib3==2.5.0
+flask
+sqlalchemy
