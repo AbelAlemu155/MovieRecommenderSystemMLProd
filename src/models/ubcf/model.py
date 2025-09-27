@@ -5,11 +5,21 @@ import pickle
 from dotenv import load_dotenv 
 import os
 from sqlalchemy import create_engine
+from pathlib import Path
 
 class UBCFRecommender:
     def __init__(self, model_path: str = None):
         load_dotenv()
-        self.model_path = os.getenv("UBCF_MODEL_PATH", model_path)
+        
+        
+
+        # Assuming PROJECT_ROOT is defined as the directory containing 'src'
+        relative_path = os.environ.get('UBCF_MODEL_PATH', 'src/models/ubcf/ubcf_model.pkl') # Use a default if not set
+        PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+        # Combine the paths to get the absolute path
+        full_path = PROJECT_ROOT / relative_path
+        
+        self.model_path = full_path
         self.utility_matrix = None
         self.user_similarity_df = None
 
@@ -17,7 +27,7 @@ class UBCFRecommender:
         """
         Fetches ratings data from the database.
         """
-        path_to_db = os.getenv("DB_PATH", "data/movielens.db")
+        path_to_db = os.getenv("DB_PATH", "src/db/home_alone.db")
         engine = create_engine("sqlite:///" + path_to_db)
         ratings_df = pd.read_sql_query("SELECT * FROM ratings where rating > 3", engine)
         return ratings_df
@@ -65,7 +75,7 @@ class UBCFRecommender:
             self.utility_matrix = model["utility_matrix"]
             self.user_similarity_df = model["user_similarity_df"]
 
-    def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 5) -> pd.DataFrame:
+    def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 20) -> pd.DataFrame:
         """
         Generates movie recommendations for a specific user using UBCF.
         """
