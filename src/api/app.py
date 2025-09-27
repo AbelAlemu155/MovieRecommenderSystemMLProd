@@ -4,7 +4,7 @@ from models.ubcf.model import UBCFRecommender
 app = Flask(__name__)
 
 
-@app.route('/recommend/<userid>', methods=['POST'])
+@app.route('/recommend/<userid>', methods=['GET'])
 def recommend(userid):
     
     print(f"Received recommendation request for user ID: {userid}")
