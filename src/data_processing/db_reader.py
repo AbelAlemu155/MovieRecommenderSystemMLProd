@@ -60,5 +60,7 @@ if __name__ == "__main__":
     reader = DBReader()
     print(reader.get_watch_history())
     print(reader.get_ratings())
-    print(reader.get_movies())
+    df_movies = reader.get_movies()
+    print(df_movies)
+    df_movies.to_csv("movies.csv", index=False)
     reader.close()
