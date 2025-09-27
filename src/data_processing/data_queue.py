@@ -21,8 +21,10 @@ class DataQueue:
     def enqueue_data(self, data):
         
         if data["type"] == "movie" or data["type"] == "rating":
-            self.movie_ids_queue(data)
-            self.user_ids_queue(data)
+            if not self.movie_id_in_cache(data['movieid']):
+                self.movie_ids_queue(data)
+                
+            # self.user_ids_queue(data)
         
         if data["type"] == "movie":
             self.movie_queue(data)
@@ -33,7 +35,18 @@ class DataQueue:
         else:
             print("Unknown data type:", data)
     
+    
+    def movie_id_in_cache(self, movie_id):
+        cache_file = os.path.join("src/data_processing/cache/", 'movieids.csv')
+        if not os.path.exists(cache_file):
+            return False
+        df = pd.read_csv(cache_file)
+        return movie_id in df['movie_id'].values
+    
     def movie_ids_queue(self, data):
+        
+        
+
         self.movie_ids.add(data['movieid'])
         if len(self.movie_ids) >= 100:
             timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
