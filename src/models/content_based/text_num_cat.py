@@ -16,7 +16,6 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from joblib import dump, load
-
 from models.content_based.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
 from models.content_based.config import (
     TFIDF_MAX_FEATURES, STOP_WORDS,
@@ -156,8 +155,8 @@ def format_movie_recommendations(recommendations):
 
 # Internal Test run
 if __name__ == "__main__":
-    build_and_save(limit=1000)
-    print("Model built and artifacts saved.")
+    # build_and_save(limit=1000)
+    # print("Model built and artifacts saved.")
     m = load_model()
     print("Model and artifacts loaded.")
-    format_movie_recommendations(m.similar_by_id("minority+report+2002")[:5])  # should find "die hard 1988"
+    format_movie_recommendations(m.similar_by_id("titanic+1997")[:5])  # should find "die hard 1988"

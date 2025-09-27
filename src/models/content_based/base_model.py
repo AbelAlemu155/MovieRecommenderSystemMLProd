@@ -138,9 +138,9 @@ def build_text_doc(row: pd.Series) -> str:
     langs = " ".join(row['spoken_languages'])
     countries = " ".join(row['production_countries'])
     parts = [
-        (row['title'], 2),
+        (row['title'], 1),
         (row['tagline'], 1),
-        (row['overview'], 1),
+        (row['overview'], 2),
         (genres, 2),
         (prods, 1),
         (langs, 1),
@@ -257,4 +257,6 @@ class BaseContentRecommender:
         inv = self.id_map.set_index('row')['movie_id']
         ids = [inv[i] for i in idxs[:k]]
         sims = 1 - distances[0][:len(ids)]
-        return list(zip(ids, sims))
+        # Extra guard: drop any residual self matches by id value
+        pairs = [(mid, float(sim)) for mid, sim in zip(ids, sims) if str(mid) != str(movie_id)]
+        return pairs[:k]

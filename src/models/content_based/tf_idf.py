@@ -106,4 +106,4 @@ if __name__ == "__main__":
     print("Model built and artifacts saved.")
     m = load_model()
     print("Model and artifacts loaded.")
-    format_movie_recommendations(m.similar_by_id("minority+report+2002")[:5])  # should find "harry potter and the chamber of secrets 2002"
+    format_movie_recommendations(m.similar_by_id("titanic+1997")[:5])  # should find "harry potter and the chamber of secrets 2002"
