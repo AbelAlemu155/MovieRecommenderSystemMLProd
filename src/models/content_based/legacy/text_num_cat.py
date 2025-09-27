@@ -16,8 +16,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from joblib import dump, load
-from models.content_based.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
-from models.content_based.config import (
+from models.content_based.legacy.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
+from models.content_based.legacy.config import (
     TFIDF_MAX_FEATURES, STOP_WORDS,
     TEXT_WEIGHT, NUM_WEIGHT, CAT_WEIGHT
 )

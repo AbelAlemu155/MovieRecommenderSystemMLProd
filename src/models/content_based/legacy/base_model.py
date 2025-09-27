@@ -29,7 +29,7 @@ from joblib import dump, load
 from scipy import sparse
 from sklearn.neighbors import NearestNeighbors
 
-from models.content_based.config import DB_PATH, TABLE_NAME, REQUIRED_COLS, ARTIFACT_DIR
+from models.content_based.legacy.config import DB_PATH, TABLE_NAME, REQUIRED_COLS, ARTIFACT_DIR
 
 # ---------- DB utilities ----------
 

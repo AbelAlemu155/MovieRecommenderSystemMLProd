@@ -23,8 +23,8 @@ from scipy import sparse
 from joblib import dump, load
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from models.content_based.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
-from models.content_based.config import TFIDF_MAX_FEATURES, STOP_WORDS
+from models.content_based.legacy.base_model import BaseContentRecommender, read_movies, add_docs, save_artifact, load_artifact
+from models.content_based.legacy.config import TFIDF_MAX_FEATURES, STOP_WORDS
 
 class ContentModelText(BaseContentRecommender):
     name = "cb_text"
