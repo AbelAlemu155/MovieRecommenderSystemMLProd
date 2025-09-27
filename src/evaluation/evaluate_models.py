@@ -1,6 +1,6 @@
 
 from evaluation.get_data import get_data
-
+import pandas as pd
 from models.collaborative_filtering.helpers import compute_implicit_rating
 from models.collaborative_filtering.item_based_filtering import ItemBasedFiltering
 def evaluate_item_based():
@@ -48,12 +48,14 @@ def evaluate_item_based():
     precisions= []
     for user_id, row in test_user_item_matrix.iterrows():
         # get the top 20 relevant items
-        relevant_items = row.nlargest(top_k).values.tolist()
+        relevant_items = row.nlargest(top_k).index.tolist()
         predicted_items = model.recommend(user_id)
+        
+        
         hits = set(predicted_items) & set(relevant_items)
 
         precision = len(hits) / len(predicted_items)
-    
+        print(precision)
         precisions.append(precision)
 
     mean_precision = sum(precisions) / len(precisions)
