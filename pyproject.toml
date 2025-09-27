@@ -7,7 +7,7 @@ name = "home-alone"
 version = "0.1.0"
 description = "Movie recommender"
 authors = [
-  { name = "Mustapha Alaba", email = "alabamustapha@gmail.com" }
+  { name = "Mustapha Alaba", email = "alabamustapha@gmail.com" },
   { name = "Stephen Oduh", email = "osobotu@gmail.com" }
 ]
 [build-system]

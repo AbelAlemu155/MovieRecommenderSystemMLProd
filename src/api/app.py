@@ -1,5 +1,6 @@
 from flask import Flask
 from models.ubcf.model import UBCFRecommender
+from models.content_based.content_based_rec import ContentBasedRecommender
 
 app = Flask(__name__)
 
@@ -8,7 +9,8 @@ app = Flask(__name__)
 def recommend(userid):
     
     print(f"Received recommendation request for user ID: {userid}")
-    recommended = UBCFRecommender().recommend(user_id=int(userid)).index.tolist()
+    recommended = ContentBasedRecommender().recommend(user_id=int(userid), k=20)
+    # recommended = UBCFRecommender().recommend(user_id=int(userid)).index.tolist()
     return ','.join(map(str, recommended))
 
 if __name__ == '__main__':
