@@ -3,6 +3,7 @@ import sqlite3
 import os
 import glob
 from dotenv import load_dotenv
+import time
 
 class DBWriter:
     def __init__(self):
@@ -151,7 +152,7 @@ class DBWriter:
                 row['start_time'],
                 row['last_watch']
             ))
-        self.conn.commit()
+            self.conn.commit()
         
         
 
@@ -171,28 +172,27 @@ class DBWriter:
                 row['rating'],
                 row['rated_at']
             ))
-        self.conn.commit()
+            self.conn.commit()
     
     def process_files(self):
         all_files = glob.glob(os.path.join(self.data_dir, "*.csv"))
         
         
         for file in all_files:
-            print(f"Processing {file}")
             
-            df = pd.read_csv(file)
-
-            
-            if 'movies' in file:
-                grouped = df.groupby(['userid', 'movieid']).agg({'minute': 'count', 'time': ['min', 'max']}).reset_index()
-                grouped.columns = ['userid', 'movieid', 'minute', 'start_time', 'last_watch']
-                self.update_watch_history(grouped)
-                os.remove(file)
-            elif 'ratings' in file:                
-                grouped = df.groupby(['userid', 'movieid']).agg({'time': 'max', 'rating': 'max'}).reset_index()
-                grouped.columns = ['userid', 'movieid', 'rated_at', 'rating']
-                self.update_ratings(grouped)
-                os.remove(file)
+            if 'movies' in file or 'ratings' in file:
+                df = pd.read_csv(file)
+                print(f"Processing {file}")
+                if 'movies' in file:
+                    grouped = df.groupby(['userid', 'movieid']).agg({'minute': 'count', 'time': ['min', 'max']}).reset_index()
+                    grouped.columns = ['userid', 'movieid', 'minute', 'start_time', 'last_watch']
+                    self.update_watch_history(grouped)
+                    os.remove(file)
+                elif 'ratings' in file:                       
+                    grouped = df.groupby(['userid', 'movieid']).agg({'time': 'max', 'rating': 'max'}).reset_index()
+                    grouped.columns = ['userid', 'movieid', 'rated_at', 'rating']
+                    self.update_ratings(grouped)
+                    os.remove(file)
         print("All files processed.")
 
     def close(self):
@@ -200,6 +200,9 @@ class DBWriter:
 
 
 if __name__ == "__main__":
-    writer = DBWriter()
-    writer.process_files()
-    writer.close()
+    while True:
+        print("Starting DB Writer...")
+        writer = DBWriter()
+        writer.process_files()
+        writer.close()
+        time.sleep(5)
