@@ -1,6 +1,6 @@
 from flask import Flask
 from models.ubcf.model import UBCFRecommender
-from models.content_based.content_based_rec import ContentBasedRecommender
+from models.content_based.content_based_rec import ContentBasedRecommender, Settings, _load_sqlite
 
 app = Flask(__name__)
 
