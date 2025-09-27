@@ -272,7 +272,7 @@ class SimpleContentRecommender:
             raise KeyError(f"movie_id '{movie_id}' not found")
         return self._recommend_from_row(row, k)
 
-    def recommend(self, user_id: str | int, k: int) -> List[str]:
+    def recommend(self, user_id: str | int, k: int = 20) -> List[str]:
         """
         Look up the user's latest watched movie from watch_history, then recommend.
         """
