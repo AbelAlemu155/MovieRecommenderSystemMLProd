@@ -8,3 +8,9 @@ pytz==2025.2
 tzdata==2025.2
 psutil==7.1.0
 schedule==1.2.2
+scikit-learn==1.7.2
+torch==2.8.0+cpu
+torchaudio==2.8.0+cpu
+torchvision==0.23.0+cpu
+tqdm==4.67.1
+Faker==37.8.0
