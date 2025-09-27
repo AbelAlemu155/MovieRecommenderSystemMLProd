@@ -52,6 +52,8 @@ logs/
 *.ckpt
 artifacts/
 checkpoints/
+fake_data/
+features/
 
 # -------------------------
 # Reports / Docs (generated)
