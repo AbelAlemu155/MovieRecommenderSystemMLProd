@@ -10,6 +10,10 @@ CLI printing behavior:
 
 Examples:
   Train and save:
+    # add imports at top of file:
+    from models.content_based.content_based_rec import ContentBasedRecommender, Settings, _load_sqlite
+
+    # in api call:
     db_path = "src/db/home_alone.db" 
     table = "movies"
     save_path = "src/models/content_based/artifacts/model.joblib"
