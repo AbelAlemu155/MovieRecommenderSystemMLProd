@@ -6,12 +6,19 @@ Upgrades in this version:
 - Keeps genres (light TF-IDF over genre tokens) and numerics (runtime, popularity, vote stats) as small guiding features.
 - Preserves the same public API: train(df), save(path), load(path), recommend(movie_id, k).
 - Reads directly from SQLite (default table: 'movies').
+
+Usage:
+    # Training and saving
+    python simplified_recommender.py --db path/to/movies.db --table movies --save path/to/model.joblib --embed_model all-MiniLM-L6-v2
+    # Loading and recommending
+    python simplified_recommender.py --model path/to/model.joblib --movie_id "movie_id_here" --topk 20
+
 """
 from __future__ import annotations
 
 import argparse
 import os
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
 import ast
 import math
 import sqlite3
@@ -92,12 +99,14 @@ def build_text_for_embedding(row: pd.Series) -> str:
 
 def build_genre_string(row: pd.Series) -> str:
     genres_val = row.get("genres")
-    genres_list = genres_val if isinstance(genres_val, list) else _maybe_json_list(genres_val)
+    genres_list = genres_val if isinstance(
+        genres_val, list) else _maybe_json_list(genres_val)
     return " ".join(genres_list)
 
 
 def _numeric_block(df: pd.DataFrame) -> np.ndarray:
-    cols = [c for c in ["runtime", "popularity", "vote_average", "vote_count"] if c in df.columns]
+    cols = [c for c in ["runtime", "popularity",
+                        "vote_average", "vote_count"] if c in df.columns]
     if not cols:
         return np.zeros((len(df), 0))
     X = df[cols].copy()
@@ -117,8 +126,8 @@ class Settings:
     # Embedding model
     embed_model_name: str = "all-MiniLM-L6-v2"  # 384-dim, fast & light
     # Feature weights in the concatenated space
-    embed_weight: float = 0.8
-    genre_weight: float = 0.1
+    embed_weight: float = 0.6
+    genre_weight: float = 0.3
     num_weight: float = 0.1
     # Genre vectorizer size (small; only a few genre tokens anyway)
     genre_tfidf_max_features: int = 64
@@ -131,10 +140,11 @@ class SimpleContentRecommender:
         # Components created/fit during training
         self.embed_model_name: str = self.settings.embed_model_name
         self.genre_vectorizer: Optional[TfidfVectorizer] = None
-        self.nn = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=n_neighbors)
+        self.nn = NearestNeighbors(
+            metric="cosine", algorithm="brute", n_neighbors=n_neighbors)
         # Cached matrices
         self._E = None       # embeddings (dense -> csr)
-        self._X_genre = None # csr
+        self._X_genre = None  # csr
         self._X_num = None   # csr
         self.X = None        # union csr
         # Data
@@ -144,10 +154,12 @@ class SimpleContentRecommender:
     # ---- training ----
     def train(self, df: pd.DataFrame):
         if not _SENTENCE_TRANSFORMERS_AVAILABLE:
-            raise RuntimeError("sentence-transformers not installed. pip install sentence-transformers")
+            raise RuntimeError(
+                "sentence-transformers not installed. pip install sentence-transformers")
 
         self.df = df.copy()
-        self.df["_embed_text"] = self.df.apply(build_text_for_embedding, axis=1)
+        self.df["_embed_text"] = self.df.apply(
+            build_text_for_embedding, axis=1)
         self.df["_genres_str"] = self.df.apply(build_genre_string, axis=1)
 
         # 1) Semantic embeddings for overview+tagline
@@ -169,11 +181,13 @@ class SimpleContentRecommender:
             ngram_range=(1, 1),
             min_df=1,
         )
-        self._X_genre = self.genre_vectorizer.fit_transform(self.df["_genres_str"].astype(str))
+        self._X_genre = self.genre_vectorizer.fit_transform(
+            self.df["_genres_str"].astype(str))
 
         # 3) Numerics
         num = _numeric_block(self.df)
-        self._X_num = sparse.csr_matrix(num) if num.shape[1] > 0 and self.settings.num_weight > 0 else sparse.csr_matrix((len(self.df), 0))
+        self._X_num = sparse.csr_matrix(
+            num) if num.shape[1] > 0 and self.settings.num_weight > 0 else sparse.csr_matrix((len(self.df), 0))
 
         # 4) Weighted union
         blocks = []
@@ -184,12 +198,14 @@ class SimpleContentRecommender:
         if self._X_num is not None and self._X_num.shape[1] > 0 and self.settings.num_weight > 0:
             blocks.append(self._X_num * self.settings.num_weight)
         if not blocks:
-            raise ValueError("No feature blocks available. Check settings/inputs.")
+            raise ValueError(
+                "No feature blocks available. Check settings/inputs.")
         self.X = sparse.hstack(blocks).tocsr()
 
         # index
         self.df["movie_id"] = self.df["movie_id"].astype(str)
-        self.row_of = {mid: i for i, mid in enumerate(self.df["movie_id"].tolist())}
+        self.row_of = {mid: i for i, mid in enumerate(
+            self.df["movie_id"].tolist())}
 
         # fit neighbors on union
         self.nn.fit(self.X)
@@ -197,20 +213,22 @@ class SimpleContentRecommender:
 
     # ---- recommend ----
     def _recommend_from_row(self, row: int, k: int) -> List[Tuple[str, float]]:
-        distances, indices = self.nn.kneighbors(self.X[row], n_neighbors=min(k + 1, len(self.df)))
+        distances, indices = self.nn.kneighbors(
+            self.X[row], n_neighbors=min(k + 1, len(self.df)))
         idxs = indices[0].tolist()
-        # remove self if present
+        dists = distances[0].tolist()
+
         if row in idxs:
-            idxs.remove(row)
-        # similarities
-        sims = 1.0 - distances[0][:len(idxs)]
-        # map row -> movie_id
-        ids = [self.df.iloc[i]["movie_id"] for i in idxs[:k]]
-        out = []
-        for mid, s in zip(ids, sims[:k]):
-            s = 0.0 if (isinstance(s, float) and (math.isnan(s) or s < 0)) else float(min(0.999, max(0.0, s)))
-            out.append((str(mid), s))
-        return out
+            j = idxs.index(row)
+            idxs.pop(j)
+            dists.pop(j)
+
+        idxs = idxs[:k]
+        dists = dists[:k]
+        sims = [max(0.0, min(0.999, float(1.0 - d if not math.isnan(d) else 0.0)))
+                for d in dists]
+        ids = [str(self.df.iloc[i]["movie_id"]) for i in idxs]
+        return list(zip(ids, sims))
 
     def recommend(self, movie_id: str, k: int = 10) -> List[Tuple[str, float]]:
         """Recommend K similar movies given a movie_id."""
@@ -229,7 +247,8 @@ class SimpleContentRecommender:
         try:
             import joblib
         except Exception as e:
-            raise RuntimeError("joblib is required for save/load. pip install joblib") from e
+            raise RuntimeError(
+                "joblib is required for save/load. pip install joblib") from e
         payload = {
             "settings": self.settings,
             "n_neighbors": self.n_neighbors,
@@ -248,15 +267,19 @@ class SimpleContentRecommender:
         try:
             import joblib
         except Exception as e:
-            raise RuntimeError("joblib is required for save/load. pip install joblib") from e
+            raise RuntimeError(
+                "joblib is required for save/load. pip install joblib") from e
         payload = joblib.load(path)
-        obj = cls(settings=payload.get("settings"), n_neighbors=payload.get("n_neighbors", 50))
-        obj.embed_model_name = payload.get("embed_model_name", obj.settings.embed_model_name)
+        obj = cls(settings=payload.get("settings"),
+                  n_neighbors=payload.get("n_neighbors", 50))
+        obj.embed_model_name = payload.get(
+            "embed_model_name", obj.settings.embed_model_name)
         obj.genre_vectorizer = payload.get("genre_vectorizer")
         obj.nn = payload["nn"]
         obj.X = payload["X"]
         obj.df = payload["df"]
-        obj.row_of = payload["row_of"] or ({mid: i for i, mid in enumerate(obj.df["movie_id"].tolist())} if obj.df is not None else None)
+        obj.row_of = payload["row_of"] or ({mid: i for i, mid in enumerate(
+            obj.df["movie_id"].tolist())} if obj.df is not None else None)
         # Internal caches (not needed for inference)
         obj._E = None
         obj._X_genre = None
@@ -296,13 +319,19 @@ def _load_sqlite(db_path: str, table: str = "movies") -> pd.DataFrame:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--db", default=(os.getenv("DB_PATH", "src/db/home_alone.db")), help="Path to SQLite database (e.g., home_alone.db)")
-    p.add_argument("--table", default="movies", help="Table name (default: movies)")
+    p.add_argument("--db", default=(os.getenv("DB_PATH", "src/db/home_alone.db")),
+                   help="Path to SQLite database (e.g., home_alone.db)")
+    p.add_argument("--table", default="movies",
+                   help="Table name (default: movies)")
     p.add_argument("--movie_id", default=None)
-    p.add_argument("--topk", type=int, default=20, help="Number of recommendations to return (default: 10)")
-    p.add_argument("--save", default=None, help="Optional path to save a trained model (e.g., model.joblib)")
-    p.add_argument("--model", default=None, help="Optional path to a saved model to load (skips training)")
-    p.add_argument("--embed_model", default=None, help="Override embedding model name (default: all-MiniLM-L6-v2)")
+    p.add_argument("--topk", type=int, default=20,
+                   help="Number of recommendations to return (default: 10)")
+    p.add_argument("--save", default=None,
+                   help="Optional path to save a trained model (e.g., model.joblib)")
+    p.add_argument("--model", default=None,
+                   help="Optional path to a saved model to load (skips training)")
+    p.add_argument("--embed_model", default=None,
+                   help="Override embedding model name (default: all-MiniLM-L6-v2)")
     args = p.parse_args()
 
     if args.model:
@@ -324,7 +353,7 @@ def main():
     pairs = rec.recommend(args.movie_id, k=args.topk)
 
     # pretty print
-    inv = {mid: i for i, mid in enumerate(rec.df["movie_id"]) }
+    inv = {mid: i for i, mid in enumerate(rec.df["movie_id"])}
     for i, (mid, s) in enumerate(pairs, start=1):
         row = rec.df.iloc[inv[mid]]
         year = ""
