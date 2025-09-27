@@ -16,7 +16,8 @@ dependencies = [
   "kafka-python",
   "pandas",
   "pyarrow",
-  "dotenv"
+  "dotenv",
+  "requests"
 ]
 
 [tool.setuptools]

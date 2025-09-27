@@ -7,6 +7,8 @@ class DataQueue:
         self.movie_df = pd.DataFrame(columns=["time", "userid", "movieid", "minute"])
         self.rating_df = pd.DataFrame(columns=["time", "userid", "movieid", "rating"])
         self.recommendation_df = pd.DataFrame(columns=["time", "userid", "server", "status", "recommendations", "responsetime"])
+        self.movie_ids = set()
+        self.user_ids = set()
         
         # queue_folder 
         load_dotenv()
@@ -17,6 +19,13 @@ class DataQueue:
             os.makedirs(self.queue_folder, exist_ok=True)
         
     def enqueue_data(self, data):
+        
+        if data["type"] == "movie" or data["type"] == "rating":
+            if not self.movie_id_in_cache(data['movieid']):
+                self.movie_ids_queue(data)
+                
+            # self.user_ids_queue(data)
+        
         if data["type"] == "movie":
             self.movie_queue(data)
         elif data["type"] == "rating":
@@ -25,7 +34,40 @@ class DataQueue:
             self.recommendation_queue(data)
         else:
             print("Unknown data type:", data)
+    
+    
+    def movie_id_in_cache(self, movie_id):
+        cache_file = os.path.join("src/data_processing/cache/", 'movieids.csv')
+        if not os.path.exists(cache_file):
+            return False
+        df = pd.read_csv(cache_file)
+        return movie_id in df['movie_id'].values
+    
+    def movie_ids_queue(self, data):
         
+        
+
+        self.movie_ids.add(data['movieid'])
+        if len(self.movie_ids) >= 100:
+            timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+            with open(f"{self.queue_folder}movieids_{timestamp}.csv", "a") as f:
+                f.write(f"movie_id\n")
+                for movie_id in self.movie_ids:
+                    f.write(f"{movie_id}\n")
+            print(f"Saved {len(self.movie_ids)} movie IDs to movieids_{timestamp}.csv")
+            self.movie_ids = set()  # reset set
+        
+    def user_ids_queue(self, data):
+        self.user_ids.add(data['userid'])
+        if len(self.user_ids) >= 50:
+            timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+            with open(f"{self.queue_folder}userids_{timestamp}.csv", "a") as f:
+                f.write(f"user_id\n")
+                for user_id in self.user_ids:
+                    f.write(f"{user_id}\n")
+            print(f"Saved {len(self.user_ids)} user IDs to userids_{timestamp}.csv")
+            self.user_ids = set()  # reset set
+      
     def movie_queue(self, data):
         self.movie_df = pd.concat([self.movie_df, pd.DataFrame([data])], ignore_index=True)
         # every 10_000 movies save to csv
