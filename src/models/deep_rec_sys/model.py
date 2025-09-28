@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# --------- MLP builder ---------
+# MLP builder
 def mlp_stack(dims: Sequence[int], p_drop: float = 0.1) -> nn.Sequential:
     """
     Builds: [Linear -> BatchNorm -> GELU -> Dropout] * (L-1) + final Linear (no BN/act/drop)
@@ -18,12 +18,12 @@ def mlp_stack(dims: Sequence[int], p_drop: float = 0.1) -> nn.Sequential:
             layers += [nn.LayerNorm(out), nn.GELU(), nn.Dropout(p_drop)]
     return nn.Sequential(*layers)
 
-# --------- Two-tower model (BPR only) ---------
+# Two-tower model (BPR only)
 class TwoTowerBPR(nn.Module):
     def __init__(
         self,
-        du: int,  # user feature dim
-        di: int,  # item feature dim
+        du: int,
+        di: int,
         d_embed: int = 128,
         user_hidden: Optional[Sequence[int]] = (512, 256),
         item_hidden: Optional[Sequence[int]] = (512, 256),
@@ -51,15 +51,15 @@ class TwoTowerBPR(nn.Module):
         v_neg:  [B, K, d]
         Loss:  -mean(log σ( (u·v⁺) - (u·v⁻) ))
         """
-        pos = (u_emb * v_pos).sum(dim=-1)                  # [B]
-        neg = (u_emb.unsqueeze(1) * v_neg).sum(dim=-1)     # [B, K]
-        diff = pos.unsqueeze(1) - neg                      # [B, K]
+        pos = (u_emb * v_pos).sum(dim=-1)
+        neg = (u_emb.unsqueeze(1) * v_neg).sum(dim=-1)
+        diff = pos.unsqueeze(1) - neg
         return -F.logsigmoid(diff).mean()
 
     def forward(self, u_feat: torch.Tensor, m_feat: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.encode_user(u_feat), self.encode_item(m_feat)
 
-# --------- Negative sampling helpers (training-time only) ---------
+# Negative sampling helpers (training-time only)
 @torch.no_grad()
 def sample_neg_indices_uniform(
     num_items: int,
@@ -86,8 +86,8 @@ def sample_neg_indices_uniform(
 
 @torch.no_grad()
 def gather_item_features(
-    all_item_features: torch.Tensor,  # [Ni, Di] on same device as model
-    neg_indices: torch.LongTensor,    # [B, K]
+    all_item_features: torch.Tensor,
+    neg_indices: torch.LongTensor,
 ) -> torch.Tensor:
     """
     Gathers negative item feature rows.
