@@ -10,7 +10,6 @@ class Recommender(ABC):
     @abstractmethod
     def recommend(self, user_id: int, top_k: int) -> List[str]:
         pass
-
     
     def format(self, recommendations: List[str]) -> str:
         return ','.join(map(str, recommendations))

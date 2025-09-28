@@ -1,4 +1,3 @@
-# inference_server.py
 from __future__ import annotations
 from typing import Optional, Dict, Any, Tuple, Callable, List
 import os
@@ -68,7 +67,7 @@ class StatelessModelServer:
         self.user_feats: Optional[Dict[str, Any]] = None
         self.item_feats: Optional[Dict[str, Any]] = None
 
-        self.user_encoder_fn = user_encoder_fn  # optional callable: raw_profile -> np.ndarray (Du,)
+        self.user_encoder_fn = user_encoder_fn
 
         # Preload feature stores (for known-user lookup / item precompute)
         if user_features_npz:
@@ -77,10 +76,9 @@ class StatelessModelServer:
             self.item_feats = self._load_npz(movie_features_npz, required=("X","ids"))
 
         # Runtime item embedding store
-        self.item_ids: Optional[np.ndarray] = None        # (Ni,)
-        self.item_embeds: Optional[torch.Tensor] = None   # (Ni, d) on device
+        self.item_ids: Optional[np.ndarray] = None
+        self.item_embeds: Optional[torch.Tensor] = None
 
-        # Cached means (for cold-start fallback)
         self._user_feat_mean: Optional[np.ndarray] = None
         if self.user_feats is not None:
             self._user_feat_mean = self.user_feats["X"].mean(axis=0).astype(np.float32)
@@ -91,7 +89,7 @@ class StatelessModelServer:
             ).astype(np.float32)
             self._user_feat_mean += noise
 
-    # ---------- IO helpers ----------
+    # IO helpers
     @staticmethod
     def _load_npz(path: str, required: Tuple[str, ...]) -> Dict[str, Any]:
         data = np.load(path, allow_pickle=True)
@@ -101,7 +99,7 @@ class StatelessModelServer:
         out = {k: data[k] for k in data.files}
         return out
 
-    # ---------- Model loading ----------
+    # Model loading
     def load_model(
         self,
         state_dict_path: str,
@@ -134,7 +132,7 @@ class StatelessModelServer:
         self.model = model
         return self
 
-    # ---------- Item embeddings ----------
+    # Item embeddings
     @torch.no_grad()
     def precompute_item_embeddings(
         self,
@@ -150,7 +148,6 @@ class StatelessModelServer:
         Will reuse cached embeddings unless force=True.
         """
         if self.item_embeds is not None and not force:
-            # already computed, just return cached
             return self.item_ids, self.item_embeds.cpu().numpy()
 
         if self.model is None:
@@ -158,8 +155,8 @@ class StatelessModelServer:
         if self.item_feats is None:
             raise RuntimeError("Movie features NPZ not loaded.")
 
-        X_items = self.item_feats["X"].astype(np.float32)   # (Ni, Di)
-        item_ids = self.item_feats["ids"]                   # (Ni,)
+        X_items = self.item_feats["X"].astype(np.float32)
+        item_ids = self.item_feats["ids"]
         Ni, Di = X_items.shape
 
         embeds = []
@@ -167,7 +164,7 @@ class StatelessModelServer:
             end = min(start + batch_size, Ni)
             x = torch.from_numpy(X_items[start:end]).to(self.device)
             e = self.model.encode_item(x)
-            e = F.normalize(e, dim=-1)  # ensure normalized
+            e = F.normalize(e, dim=-1)
             embeds.append(e.cpu().numpy())
 
         item_embeds = np.vstack(embeds).astype(np.float32)
@@ -187,11 +184,10 @@ class StatelessModelServer:
         self.item_embeds = torch.from_numpy(data["item_embeds"].astype(np.float32)).to(self.device)
         return self
 
-    # ---------- User feature helpers ----------
+    # User feature helpers
     def _lookup_user_features(self, user_id: Any) -> Optional[np.ndarray]:
         if self.user_feats is None:
             return None
-        # Build id -> row map lazily
         if not hasattr(self, "_user_id_to_idx"):
             ids_list = self.user_feats["ids"].tolist()
             self._user_id_to_idx = {uid: i for i, uid in enumerate(ids_list)}
@@ -212,14 +208,14 @@ class StatelessModelServer:
             return self._user_feat_mean.copy()
         raise RuntimeError("No way to build user features: provide user_features.npz or a user_encoder_fn.")
 
-    # ---------- Scoring ----------
+    # Scoring
     @torch.no_grad()
     def _encode_user(self, user_features: np.ndarray) -> torch.Tensor:
         if self.model is None:
             raise RuntimeError("Model not loaded.")
         x = torch.from_numpy(user_features.astype(np.float32)).unsqueeze(0).to(self.device)  # [1, Du]
-        u = self.model.encode_user(x)  # [1, d]
-        return F.normalize(u, dim=-1)  # safe normalization (idempotent if already normalized)
+        u = self.model.encode_user(x)
+        return F.normalize(u, dim=-1)
 
     @torch.no_grad()
     def get_recommendations(
@@ -262,9 +258,9 @@ class StatelessModelServer:
             uf = self._cold_start_user_features(cold_start_profile)
             source = "cold_start"
 
-        u = self._encode_user(uf)            # [1, d]
+        u = self._encode_user(uf)
         # Scores = dot with all items
-        scores = (u @ self.item_embeds.T).squeeze(0)   # [Ni]
+        scores = (u @ self.item_embeds.T).squeeze(0)
         vals, idx = torch.topk(scores, k=min(top_k, scores.numel()), largest=True, sorted=True)
         top_ids = self.item_ids[idx.cpu().numpy()]
         out = {"item_ids": top_ids}
@@ -272,37 +268,3 @@ class StatelessModelServer:
             out["scores"] = vals.detach().cpu().numpy()
         out["user_source"] = source
         return out
-
-if __name__ == "__main__":
-    server = StatelessModelServer(
-        user_features_npz="src/models/deep_rec_sys/features/user_features.npz",
-        movie_features_npz="src/models/deep_rec_sys/features/movie_features.npz"
-    ).load_model("src/models/deep_rec_sys/checkpoints/two_tower_bpr_best.pt")
-
-    server.precompute_item_embeddings(save_npz="features/item_embeds.npz")
-    server.load_item_embeddings("features/item_embeds.npz")
-
-    id_to_title = load_movie_id_to_title("src/models/deep_rec_sys/fake_data/movie_data.csv")
-    
-    t0 = time()
-    recs = server.get_recommendations(user_id=21343, top_k=20)
-    # print(recs)
-    dt = time() - t0
-    print(f"Time taken: {dt*1000:.1f} ms")
-
-    pretty = recommendations_with_titles(recs, id_to_title)
-    print(pretty["user_source"])
-    for title, score in zip(pretty["titles"], pretty["scores"]):
-        print(f"{title:40s}  score={score:.3f}")
-
-    # try unknown user
-    t0 = time()
-    recs2 = server.get_recommendations(user_id="unknown_user", top_k=20)
-    # print(recs2)
-    dt = time() - t0
-    print(f"Time taken: {dt*1000:.1f} ms")
-
-    pretty = recommendations_with_titles(recs2, id_to_title)
-    print(pretty["user_source"])
-    for title, score in zip(pretty["titles"], pretty["scores"]):
-        print(f"{title:40s}  score={score:.3f}")
