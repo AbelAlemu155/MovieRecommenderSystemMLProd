@@ -10,6 +10,7 @@ from .utils.data_loading import (
     load_movie_features_npz,
     load_engagements_npz,
 )
+from .utils.export_db import export_db
 from .utils.compute_features import (
     build_user_features_from_interactions,
     build_movie_features_npz,
@@ -48,20 +49,27 @@ class DeepRecSysModel(Recommender):
         self.movie_feats: Optional[Dict[str, Any]] = None
 
     def export_db_to_csv(self) -> None:
-        """Step 1: Export SQLite DB to CSV files."""
-        print("1. Exporting DB tables to CSV...")
-        print("  Assuming DB is exported (Run export_db.py manually).")
+        """Export SQLite DB to CSV files."""
+        print("Exporting DB tables to CSV...")
         self.watch_csv = os.path.join(self.db_path, "watch_history.csv")
         self.ratings_csv = os.path.join(self.db_path, "ratings.csv")
         self.movies_csv = os.path.join(self.db_path, "movies.csv")
         os.makedirs(self.db_path, exist_ok=True)
+        export_db()
+        return 
+
+    def clear_csv_from_db(self) -> None:
+        os.remove(self.watch_csv)
+        os.remove(self.ratings_csv)
+        os.remove(self.movies_csv)
+        print(f"Removed temporary csv files for computing features.")
+        return
 
     def compute_features(self) -> None:
-        """Step 2: Compute and save user/movie features to NPZ."""
-        print("2. Computing and saving features to NPZ...")
+        """Compute and save user/movie features to NPZ."""
+        print("Computing and saving features to NPZ...")
         os.makedirs(self.feature_dir, exist_ok=True)
         
-        # User features: One-hot based on interactions (as per compute_features.py __main__)
         user_result = build_user_features_from_interactions(
             watch_csv=self.watch_csv,
             ratings_csv=self.ratings_csv,
@@ -73,8 +81,8 @@ class DeepRecSysModel(Recommender):
         print(f"  Movie features saved to {movie_result['out']} with shape {movie_result['X'].shape}")
     
     def compute_engagement(self) -> None:
-        """Step 3: Compute and save engagement scores to NPZ."""
-        print("3. Computing and saving engagement scores to NPZ...")
+        """Compute and save engagement scores to NPZ."""
+        print("Computing and saving engagement scores to NPZ...")
         os.makedirs(self.feature_dir, exist_ok=True)
 
         user_ids, movie_ids, engagement = compute_engagement_from_watch_and_ratings(
@@ -87,11 +95,13 @@ class DeepRecSysModel(Recommender):
     
     def load_data(self) -> Dict[str, Any]:
         """
-        Runs Steps 1-3: Prepares all necessary NPZ files and loads them into memory.
+        Prepares all necessary NPZ files and loads them into memory.
         """
         self.export_db_to_csv()
         self.compute_features()
         self.compute_engagement()
+        self.clear_csv_from_db()
+
 
         print("\nLoading features and engagements from NPZ...")
         self.user_feats = load_user_features_npz(self.user_feat_npz)
@@ -107,16 +117,16 @@ class DeepRecSysModel(Recommender):
 
     def train(self, data: Optional[Dict[str, Any]] = None, **kwargs) -> None:
         """
-        Step 4: Trains the TwoTowerBPR model.
+        Trains the TwoTowerBPR model.
         Args: data is ignored but kept for compatibility with Recommender ABC.
         """
         if self.user_feats is None or self.movie_feats is None or self.engagement is None:
             print("Feature data not found. Running load_data()...")
             self.load_data()
             
-        print("\n4. Starting model training (TwoTowerBPR)...")
+        print("\nStarting model training (TwoTowerBPR)...")
         
-        # --- Data Setup ---
+        # Data Setup
         dataset = MovieDataset(self.user_feats, self.movie_feats, self.engagement)
         train_loader, val_loader, test_loader = create_dataloaders(
             dataset,
@@ -126,7 +136,7 @@ class DeepRecSysModel(Recommender):
             seed=kwargs.get("seed", 42),
         )
 
-        # --- Model/Optimizer Setup ---
+        # Model/Optimizer Setup
         users_dim = self.user_feats["X"].shape[1]
         items_dim = self.movie_feats["X"].shape[1]
         d_embed = kwargs.get("d_embed", 128)
@@ -150,7 +160,7 @@ class DeepRecSysModel(Recommender):
             
         VAL_NEG = precompute_negatives(val_loader, all_item_feats.shape[0], K=K, device=self.device)
         
-        # --- Training Loop ---
+        # Training Loop
         best_val = float("inf")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
@@ -198,7 +208,7 @@ class DeepRecSysModel(Recommender):
 
     def recommend(self, user_id: Any, top_k: int=20) -> List[int]:
         """
-        Step 5: Calls the inference server to get recommendations.
+        Calls the inference server to get recommendations.
         
         Returns: A list of recommended movie IDs (integers/Any).
         """
@@ -210,39 +220,25 @@ class DeepRecSysModel(Recommender):
         t0 = time()
         recs = self.server.get_recommendations(user_id=user_id, top_k=top_k)
         dt = time() - t0
-        print(f"Time taken: {dt*1000:.1f} ms")
-
-        try:
-            id_to_title = load_movie_id_to_title(self.movie_data_csv)
-            pretty = recommendations_with_titles(recs, id_to_title)
-            print(f"Source: {pretty['user_source']}")
-            for title, score in zip(pretty["titles"], pretty["scores"]):
-                print(f"  {title:40s}  score={score:.3f}")
-        except Exception:
-            pass
-            
+        print(f"Time taken: {dt*1000} ms")
         return recs["item_ids"].tolist()
 
 
 if __name__ == "__main__":
     recommender = DeepRecSysModel(base_path="src/models/deep_rec_sys")
 
-    # 1. Load Data
+    # Load Data
     recommender.watch_csv = "src/db/watch_history.csv"
     recommender.ratings_csv = "src/db/ratings.csv"
     recommender.movies_csv = "src/db/movies.csv"
-    
-    # Load and process the data (computes features/engagements)
     recommender.load_data()
 
-    # 2. Train Model
+    # Train Model
     recommender.train(epochs=10, batch_size=512, K=40)
 
-    # 3. Recommend
+    # Recommend
     recs = recommender.recommend(user_id=21585, top_k=20)
     print(recs)
-    recs1 = recommender.recommend(user_id=21585, top_k=20)
-    print(recs1)
     
     # Unknown user example
     rec2 = recommender.recommend(user_id="unknown_user", top_k=20)
