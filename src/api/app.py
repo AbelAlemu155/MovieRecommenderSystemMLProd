@@ -1,6 +1,7 @@
 from flask import Flask
-from models.ubcf.model import UBCFRecommender
-from src.models.deep_rec_sys.deep_rec_model import DeepRecSysModel
+from models.model_factory import RecommenderFactory, RecommenderModelType
+from models.base_model import Recommender
+from models.content_based.content_based_rec import NoUserFound
 
 
 app = Flask(__name__)
@@ -8,14 +9,27 @@ app = Flask(__name__)
 
 @app.route('/recommend/<userid>', methods=['GET'])
 def recommend(userid):
-    
     print(f"Received recommendation request for user ID: {userid}")
-    # ucbf_model = UBCFRecommender()
-    # recommended = ucbf_model.recommend(user_id=int(userid)).index.tolist()
 
-    deep_rec_sys = DeepRecSysModel(base_path="src/models/deep_rec_sys")
-    recommended = deep_rec_sys.recommend(user_id=int(userid))
-    return deep_rec_sys.format(recommended)
+    rf = RecommenderFactory()
+    recommender_type = RecommenderModelType.UCBF
+    recommendations = []
+    response = ""
+
+    try:
+        recommender = rf.get_recommender(recommender_type)
+        recommendations = recommender.recommend(user_id=int(userid))
+        response = recommender.format(recommendations)
+    except Exception as e:
+        print(f"Primary model failed to find user recommendations: {e}")
+        try:
+            deep_recommender = rf.get_recommender(RecommenderModelType.DEEP_LEARNING)
+            recommendations = deep_recommender.recommend(user_id=int(userid))
+            response = deep_recommender.format(recommendations)
+        except Exception as fallback_error:
+            print(f"FATAL: Fallback model failed too. Error: {fallback_error}")
+            recommendations = []
+    return response
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8082)
