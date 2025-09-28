@@ -22,26 +22,24 @@ def train_one_epoch(
     n_batches = 0
 
     for batch in tqdm(loader, desc="Train", leave=False):
-        # unpack (expecting your current dataset return)
         u_feat, m_feat, y, pos_item_idx = batch
         u_feat = u_feat.to(device, non_blocking=True)
         m_feat = m_feat.to(device, non_blocking=True)
         pos_item_idx = pos_item_idx.to(device, non_blocking=True)
 
-        # sample negatives -> gather features
         neg_idx = sample_neg_indices_uniform(
             num_items=all_item_feats.shape[0],
             pos_indices=pos_item_idx,
             K=K,
             device=device,
-        )  # [B, K]
-        v_neg_feat = gather_item_features(all_item_feats, neg_idx)  # [B, K, Di]
+        )
+        v_neg_feat = gather_item_features(all_item_feats, neg_idx)
 
         # encode
-        u_emb = model.encode_user(u_feat)                                  # [B, d]
-        v_pos = model.encode_item(m_feat)                                  # [B, d]
+        u_emb = model.encode_user(u_feat)
+        v_pos = model.encode_item(m_feat)
         B, Kneg, Di = v_neg_feat.shape
-        v_neg = model.encode_item(v_neg_feat.view(B * Kneg, Di)).view(B, Kneg, -1)  # [B, K, d]
+        v_neg = model.encode_item(v_neg_feat.view(B * Kneg, Di)).view(B, Kneg, -1)
 
         # loss
         loss = TwoTowerBPR.bpr_loss(u_emb, v_pos, v_neg)
