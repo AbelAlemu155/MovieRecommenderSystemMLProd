@@ -1,5 +1,7 @@
 
 from evaluation.get_data import get_data
+import numpy as np
+
 import pandas as pd
 from models.collaborative_filtering.helpers import compute_implicit_rating
 from models.collaborative_filtering.item_based_filtering import ItemBasedFiltering
@@ -21,7 +23,7 @@ def evaluate_item_based():
                 ON WH.user_id = R.user_id AND WH.movie_id = R.movie_id;
                     """
     
-    train_df, test_df= get_data(query)
+    train_df, val_df, test_df= get_data(query)
 
     top_k=20
 
@@ -41,22 +43,30 @@ def evaluate_item_based():
     
 
     #  first train the model
-    model= ItemBasedFiltering(train_set= train_df)
+    model= ItemBasedFiltering(train_set= train_df, val_set=val_df)
     model.train()
 
     # evaluate on the test set 
-    precisions= []
-    for user_id, row in test_user_item_matrix.iterrows():
-        # get the top 20 relevant items
-        relevant_items = row.nlargest(top_k).index.tolist()
-        predicted_items = model.recommend(user_id)
-        
-        
-        hits = set(predicted_items) & set(relevant_items)
+   
+ 
+    relevant_items = test_user_item_matrix.apply(
+        lambda row: row.nlargest(top_k).index.tolist(), axis=1
+    )
 
-        precision = len(hits) / len(predicted_items)
-        print(precision)
-        precisions.append(precision)
+   
+    predicted_items = [model.recommend(user_id) for user_id in test_user_item_matrix.index]
+
+   
+    relevant_matrix = np.array(relevant_items.tolist(), dtype=object)   # shape: (n_users, top_k)
+    predicted_matrix = np.array(predicted_items, dtype=object)          # shape: (n_users, k_pred)
+
+   
+    precisions = np.array([
+        np.isin(pred_row, rel_row).sum() / len(pred_row)
+        if len(pred_row) > 0 else 0.0
+        for pred_row, rel_row in zip(predicted_matrix, relevant_matrix)
+    ])
+
 
     mean_precision = sum(precisions) / len(precisions)
     print(f'mean_precison is: {mean_precision}')

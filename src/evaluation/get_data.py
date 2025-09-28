@@ -11,11 +11,15 @@ def get_data(query):
     #  split the data 80% to 20% rule using time into train and test data
     df_sorted = df.sort_values(by='last_watch')
 
-    split_idx = int(len(df_sorted) * 0.8)
-    train_df = df_sorted.iloc[:split_idx].copy()
-    test_df = df_sorted.iloc[split_idx:].copy()
+    train_idx = int(len(df_sorted) * 0.7)
+    val_idx   = int(len(df_sorted) * 0.85)  # 70% + 15% = 85%
 
-    return train_df, test_df
+    # Split the data
+    train_df = df_sorted.iloc[:train_idx].copy()
+    val_df   = df_sorted.iloc[train_idx:val_idx].copy()
+    test_df  = df_sorted.iloc[val_idx:].copy()
+
+    return train_df, val_df,  test_df
 
 
 
