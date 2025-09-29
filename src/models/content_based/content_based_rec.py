@@ -276,12 +276,13 @@ class ContentBasedRecommender(Recommender):
         """
         db_path = "src/db/home_alone.db" 
         table = "movies"
-        save_path = "src/models/content_based/artifacts/model.joblib"
-        os.makedirs('src/models/content_based/artifacts', exist_ok=True)
+        save_path = "src/models/content_based/artifacts"
+        model_path = os.path.join(save_path, "model.joblib")
+        os.makedirs(save_path, exist_ok=True)
         settings = Settings()
         df = _load_sqlite(db_path, table=table)
         rec = ContentBasedRecommender(settings=settings).train_model(df)
-        return rec.save(save_path)
+        return rec.save(model_path)
 
     # ---- recommend ----
     def _recommend_from_row(self, row: int, k: int) -> List[Tuple[str, float]]:
