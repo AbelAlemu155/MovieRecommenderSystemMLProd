@@ -246,9 +246,7 @@ class StatelessModelServer:
             uf = user_features.astype(np.float32)
             source = "provided_features"
         elif user_id is not None:
-            print(f"Looking up user_id={user_id}")
             uf = self._lookup_user_features(user_id)
-            print(f"Lookup result: {uf}")
             if uf is not None:
                 source = "lookup_user_id"
             else:
