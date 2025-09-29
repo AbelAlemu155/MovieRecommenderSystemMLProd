@@ -7,34 +7,6 @@ import torch.nn.functional as F
 from time import time
 from .model import TwoTowerBPR
 
-import pandas as pd
-
-def load_movie_id_to_title(csv_path: str) -> dict:
-    """
-    Build a dict {movie_id -> title} from movie_data.csv.
-    """
-    df = pd.read_csv(csv_path)
-    if "movie_id" not in df.columns or "title" not in df.columns:
-        raise ValueError("movie_data.csv must have 'movie_id' and 'title' columns")
-    return dict(zip(df["movie_id"], df["title"]))
-
-
-def recommendations_with_titles(
-    recs: dict,
-    id_to_title: dict,
-) -> dict:
-    """
-    Replace 'item_ids' in recommendations dict with movie titles when available.
-    Keeps scores and user_source intact.
-    """
-    ids = recs["item_ids"]
-    titles = [id_to_title.get(mid, str(mid)) for mid in ids]
-    return {
-        "titles": titles,
-        "scores": recs.get("scores"),
-        "user_source": recs.get("user_source", None),
-    }
-
 
 class StatelessModelServer:
     """

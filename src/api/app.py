@@ -12,7 +12,7 @@ def recommend(userid):
     print(f"Received recommendation request for user ID: {userid}")
 
     rf = RecommenderFactory()
-    recommender_type = RecommenderModelType.UBCF
+    recommender_type = RecommenderModelType.DEEP_LEARNING
     recommendations = []
     response = ""
 
@@ -32,4 +32,4 @@ def recommend(userid):
     return response
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8082)
+    app.run(debug=False, host='0.0.0.0', port=8082, threaded=True)
