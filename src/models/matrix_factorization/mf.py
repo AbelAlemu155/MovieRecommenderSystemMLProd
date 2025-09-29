@@ -15,7 +15,7 @@ class MatrixFactorizationRecommender(Recommender):
         self.iters = iters
 
         PROJECT_ROOT = Path(__file__).resolve().parents[3]
-        default_dir = os.environ.get("MF_MODEL_DIR", "src/models/mf")
+        default_dir = os.environ.get("MF_MODEL_DIR", "src/models/matrix_factorization")
         self.model_dir = PROJECT_ROOT / (model_dir or default_dir)
         self.model_dir.mkdir(parents=True, exist_ok=True)
 
