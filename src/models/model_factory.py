@@ -9,7 +9,7 @@ from .content_based.content_based_rec import NoUserFound
 class RecommenderModelType(Enum):
     COLLABORATIVE_FILTERING = "CF"
     CONTENT_BASED = "CB"
-    UCBF = "UCBF"
+    UBCF = "UBCF"
     DEEP_LEARNING = "DL"
 
 class RecommenderFactory:
@@ -21,7 +21,7 @@ class RecommenderFactory:
         RecommenderModelType.COLLABORATIVE_FILTERING.value: ItemBasedFiltering,
         RecommenderModelType.CONTENT_BASED.value: ContentBasedRecommender,
         RecommenderModelType.DEEP_LEARNING.value: DeepRecSysModel,
-        RecommenderModelType.UCBF.value: UBCFRecommender,
+        RecommenderModelType.UBCF.value: UBCFRecommender,
     }
 
     @staticmethod
@@ -40,8 +40,6 @@ class RecommenderFactory:
         """
         model_key = model_type.value
         if model_key in RecommenderFactory._MODELS:
-            if model_key == "UCBF":
-                raise NoUserFound("test")
             return RecommenderFactory._MODELS[model_key]()
         else:
             return CollaborativeFilteringRecommender()
