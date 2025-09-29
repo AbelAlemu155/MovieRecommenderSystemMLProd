@@ -273,6 +273,7 @@ class ContentBasedRecommender(Recommender):
         db_path = "src/db/home_alone.db" 
         table = "movies"
         save_path = "src/models/content_based/artifacts/model.joblib"
+        os.makedirs('src/models/content_based/artifacts', exist_ok=True)
         settings = Settings()
         df = _load_sqlite(db_path, table=table)
         rec = ContentBasedRecommender(settings=settings).train_model(df)
