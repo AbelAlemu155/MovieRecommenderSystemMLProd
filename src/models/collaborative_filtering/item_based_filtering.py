@@ -4,7 +4,9 @@ from data_processing.db_writer import DBWriter
 from models.base_model import Recommender
 import pandas as pd, numpy as np, joblib
 
+from models.base_model import Recommender
 class ItemBasedFiltering(Recommender):
+
 
     def __init__(self, train_set, val_set,   type='cosine', top_n= 20,alpha=0.6, beta=0.01, lambda_decay=0.01):
         self.type= type
@@ -15,9 +17,6 @@ class ItemBasedFiltering(Recommender):
         self.val_set= val_set
         self.train_set= train_set # this is a pandas dataframe
 
-        
-
-        
     
     # def load(self):
     #     writer= DBWriter()
