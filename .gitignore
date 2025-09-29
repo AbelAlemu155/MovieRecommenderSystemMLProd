@@ -13,9 +13,6 @@ __pycache__/
 .eggs/
 *.egg
 
-
-
-
 # -------------------------
 # Virtual environments
 # -------------------------
@@ -110,6 +107,7 @@ Thumbs.db
 # -------------------------
 # Data processing artifacts
 # -------------------------
+
 /src/data_processing/output/
 /src/data_processing/data_queues/
 /src/db/
@@ -117,3 +115,4 @@ Thumbs.db
 src/db
 src/data_processing/data_queues/
 src/data_processing/output/
+
