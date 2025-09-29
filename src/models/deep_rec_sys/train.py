@@ -94,9 +94,9 @@ def eval_one_epoch(
 
 if __name__ == "__main__":
     # load data
-    users = load_user_features_npz("src/models/deep_rec_sys/features/user_features.npz")
-    movies = load_movie_features_npz("src/models/deep_rec_sys/features/movie_features.npz")
-    eng    = load_engagements_npz("src/models/deep_rec_sys/features/engagements.npz")
+    users = load_user_features_npz(".src/models/deep_rec_sys/features/user_features.npz")
+    movies = load_movie_features_npz(".src/models/deep_rec_sys/features/movie_features.npz")
+    eng    = load_engagements_npz(".src/models/deep_rec_sys/features/engagements.npz")
 
     print(quick_summary(users, movies, eng))
     peek_ids(users, movies, eng)
