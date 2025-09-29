@@ -37,6 +37,25 @@ def get_data():
     return train_df, val_df,  test_df
 
 
+def get_random_users(count=500):
+    writer = DBWriter()
+    query = """
+    SELECT  user_id
+    FROM watch_history
+    ORDER BY RANDOM()
+    LIMIT  ?;
+    """
+    cursor= writer.conn.cursor()
+    # fetch count user ids randomly for the requests
+    cursor.execute(query, (count,))
+    rows = cursor.fetchall()
+    writer.conn.close()
+    return [row[0] for row in rows]
+
+        
+
+
+
 
     
 

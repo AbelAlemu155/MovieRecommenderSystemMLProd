@@ -16,7 +16,7 @@ class ItemBasedFiltering(Recommender):
         self.beta= beta
         self.lambda_decay= lambda_decay
         self.val_set= val_set
-        self.train_set= train_set # this is a pandas dataframe
+        self.train_set= train_set
 
     
     # def load(self):
