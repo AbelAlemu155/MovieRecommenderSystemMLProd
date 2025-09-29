@@ -16,7 +16,7 @@ from .utils.compute_features import (
     build_movie_features_npz,
 )
 from .utils.compute_engagement import compute_engagement_from_watch_and_ratings
-from .inference import StatelessModelServer, load_movie_id_to_title
+from .inference import StatelessModelServer
 from .model import TwoTowerBPR, sample_neg_indices_uniform, gather_item_features
 from .dataset import MovieDataset, create_dataloaders
 from .train import train_one_epoch, eval_one_epoch
