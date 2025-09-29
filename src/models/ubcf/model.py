@@ -5,9 +5,10 @@ import pickle
 from dotenv import load_dotenv 
 import os
 from sqlalchemy import create_engine
+from models.base_model import Recommender
 from pathlib import Path
 
-class UBCFRecommender:
+class UBCFRecommender(Recommender):
     def __init__(self, model_path: str = None):
         load_dotenv()
         
