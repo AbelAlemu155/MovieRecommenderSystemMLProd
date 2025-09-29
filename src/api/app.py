@@ -12,7 +12,7 @@ def recommend(userid):
     print(f"Received recommendation request for user ID: {userid}")
 
     rf = RecommenderFactory()
-    recommender_type = RecommenderModelType.UCBF
+    recommender_type = RecommenderModelType.UBCF
     recommendations = []
     response = ""
 
