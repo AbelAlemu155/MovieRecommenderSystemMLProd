@@ -21,6 +21,7 @@ class MatrixFactorizationRecommender(Recommender):
 
         self.factors_path = self.model_dir / "mf_factors.npz"
         self.maps_path = self.model_dir / "mf_id_maps.pkl"
+        self.popularity_path = self.model_dir / "mf_popularity.npz"
 
         self.U = None
         self.V = None
@@ -43,20 +44,37 @@ class MatrixFactorizationRecommender(Recommender):
             return set()
 
     def _popularity_top_n(self, n: int, exclude_movie_ids=None) -> pd.Index:
-        df = self._get_ratings()
-        if df.empty:
+        """
+        Load precomputed popularity from NPZ created during train(), no DB calls.
+        If the NPZ is missing, fall back to a proxy using V's L2 norms.
+        """
+        exclude = set(exclude_movie_ids or [])
+        try:
+            data = np.load(self.popularity_path)
+            movie_ids = data["movie_ids"]
+            scores = data["scores"]
+        except Exception:
+            if self.V is None:
+                if self.factors_path.exists():
+                    self.load()
+                else:
+                    return pd.Index([])
+
+            movie_ids = np.array(self.item_idx2id, dtype=np.int64)
+            scores = np.linalg.norm(self.V, axis=1)
+
+        if exclude:
+            mask = ~np.isin(movie_ids, np.fromiter(exclude, dtype=np.int64))
+            movie_ids = movie_ids[mask]
+            scores = scores[mask]
+
+        if movie_ids.size == 0:
             return pd.Index([])
 
-        grp = df.groupby('movie_id').agg(v=('rating', 'count'), R=('rating', 'mean')).reset_index()
-        C = df['rating'].mean()
-        m = max(int(grp['v'].quantile(0.60)), 5)
-        grp['score'] = (grp['v']/(grp['v']+m))*grp['R'] + (m/(grp['v']+m))*C
-
-        if exclude_movie_ids:
-            grp = grp[~grp['movie_id'].isin(exclude_movie_ids)]
-
-        grp = grp.sort_values('score', ascending=False)
-        return pd.Index(grp['movie_id'].head(n).tolist())
+        k = min(n, movie_ids.size)
+        topk_idx = np.argpartition(scores, -k)[-k:]
+        topk_idx = topk_idx[np.argsort(scores[topk_idx])[::-1]]
+        return pd.Index(movie_ids[topk_idx].tolist())
 
     # Train, save and load
     def train(self, df: pd.DataFrame | None = None):
@@ -95,6 +113,17 @@ class MatrixFactorizationRecommender(Recommender):
             ii = self.item_id2idx[r.movie_id]
             user_items[ui].append((ii, r.rating_centered))
             item_users[ii].append((ui, r.rating_centered))
+
+        # precompute popularity
+        grp = df.groupby('movie_id').agg(v=('rating', 'count'), R=('rating', 'mean')).reset_index()
+        C = df['rating'].mean()
+        m = max(int(grp['v'].quantile(0.60)), 5)
+        scores = (grp['v'] / (grp['v'] + m)) * grp['R'] + (m / (grp['v'] + m)) * C
+        np.savez_compressed(
+            self.popularity_path,
+            movie_ids=grp['movie_id'].to_numpy(dtype=np.int64),
+            scores=scores.to_numpy(dtype=np.float64)
+        )
 
         regI = self.reg * np.eye(k)
 
