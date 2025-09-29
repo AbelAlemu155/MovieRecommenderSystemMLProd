@@ -33,7 +33,7 @@ def recommend(userid):
     app.logger.info(f"Received recommendation request for user ID: {userid}")
 
     rf = RecommenderFactory()
-    recommender_type = RecommenderModelType.MATRIX_FACTOR
+    recommender_type = RecommenderModelType.UBCF
     recommendations = []
     response = ""
 
