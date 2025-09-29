@@ -1,11 +1,14 @@
 
-from evaluation.get_data import get_data
+
 import numpy as np
 
 import pandas as pd
-from models.collaborative_filtering.helpers import compute_implicit_rating
 from models.collaborative_filtering.item_based_filtering import ItemBasedFiltering
-from evaluation.evaluate_models import get_random_users
+from models.collaborative_filtering.helpers import compute_implicit_rating
+from .get_data import get_data, get_random_users
+
+import time
+
 
 import requests
 
@@ -74,7 +77,7 @@ def evaluate_average_latency():
     latency= 0
     
     for u_id in users:
-        time= time.now()
+       
         params = {
         "u_id": u_id,
         
@@ -83,8 +86,9 @@ def evaluate_average_latency():
         response = requests.get(url, params=params)
         end_time = time.time()
 
-        latency+= end_time
+        latency+= end_time - start_time
     
+    print(latency/ len(users))
     return latency / len(users)
         
 
@@ -93,8 +97,10 @@ def evaluate_average_latency():
 
 
 if __name__=='__main__':
-    # evaluate_item_based()
     evaluate_average_latency()
+    # evaluate_item_based()
+   
+    
 
 
 

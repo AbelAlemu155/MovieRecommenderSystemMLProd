@@ -3,7 +3,7 @@ from .helpers import compute_similarity, default_recommender, compute_implicit_r
 from data_processing.db_writer import DBWriter
 from models.base_model import Recommender
 import pandas as pd, numpy as np, joblib
-from evaluation.evaluate_models import get_data
+from evaluation.get_data import get_data
 
 from models.base_model import Recommender
 class ItemBasedFiltering(Recommender):

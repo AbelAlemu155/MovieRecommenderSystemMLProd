@@ -1,10 +1,10 @@
-from .deep_rec_sys.deep_rec_model import DeepRecSysModel
+
 from .collaborative_filtering.item_based_filtering import ItemBasedFiltering
-from .content_based.content_based_rec import ContentBasedRecommender
+
 from .ubcf.model import UBCFRecommender
 from .base_model import Recommender
 from enum import Enum
-from .content_based.content_based_rec import NoUserFound
+
 
 class RecommenderModelType(Enum):
     COLLABORATIVE_FILTERING = "CF"
@@ -19,8 +19,7 @@ class RecommenderFactory:
     """
     _MODELS = {
         RecommenderModelType.COLLABORATIVE_FILTERING.value: ItemBasedFiltering,
-        RecommenderModelType.CONTENT_BASED.value: ContentBasedRecommender,
-        RecommenderModelType.DEEP_LEARNING.value: DeepRecSysModel,
+       
         RecommenderModelType.UBCF.value: UBCFRecommender,
     }
 
