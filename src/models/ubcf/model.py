@@ -95,7 +95,8 @@ class UBCFRecommender(Recommender):
         knn = similar_users.head(k)
         
         if knn.empty:
-            return pd.DataFrame({'message': ["No similar users found."]})
+            # return pd.DataFrame({'message': ["No similar users found."]})
+            raise ValueError("No similar users found.")
         
         neighbor_ratings = utility_matrix.loc[knn.index]
         neighbor_weights = knn.values
