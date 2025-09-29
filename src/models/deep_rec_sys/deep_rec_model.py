@@ -21,7 +21,7 @@ from .model import TwoTowerBPR, sample_neg_indices_uniform, gather_item_features
 from .dataset import MovieDataset, create_dataloaders
 from .train import train_one_epoch, eval_one_epoch
 
-from src.models.base_model import Recommender
+from models.base_model import Recommender
 
 class DeepRecSysModel(Recommender):
     """
@@ -212,7 +212,7 @@ class DeepRecSysModel(Recommender):
         
         Returns: A list of recommended movie IDs (integers/Any).
         """
-        print(f"\n5. Getting recommendations for user_id={user_id} (top_k={top_k})...")
+        print(f"\nGetting recommendations for user_id={user_id} (top_k={top_k})...")
         
         if self.server is None:
             self._setup_inference_server()
