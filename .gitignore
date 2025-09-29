@@ -22,6 +22,7 @@ env/
 *env/
 .env
 
+
 # -------------------------
 # Data folders (large/raw/generated)
 # -------------------------
@@ -106,6 +107,12 @@ Thumbs.db
 # -------------------------
 # Data processing artifacts
 # -------------------------
-src/data_processing/output/
+
+/src/data_processing/output/
+/src/data_processing/data_queues/
+/src/db/
+/src/src/db
+src/db
 src/data_processing/data_queues/
-src/db/
+src/data_processing/output/
+
