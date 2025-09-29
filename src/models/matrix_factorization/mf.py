@@ -121,7 +121,7 @@ class MatrixFactorizationRecommender(Recommender):
         scores = (grp['v'] / (grp['v'] + m)) * grp['R'] + (m / (grp['v'] + m)) * C
         np.savez_compressed(
             self.popularity_path,
-            movie_ids=grp['movie_id'].to_numpy(dtype=np.int64),
+            movie_ids=grp['movie_id'].to_numpy(),
             scores=scores.to_numpy(dtype=np.float64)
         )
 
