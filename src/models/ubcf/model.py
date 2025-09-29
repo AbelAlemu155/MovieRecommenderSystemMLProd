@@ -294,7 +294,7 @@ class UBCFRecommender(Recommender):
 if __name__ == "__main__":
     
     recommender = UBCFRecommender()
-    # recommender.train()
+    recommender.train()
     
     # ---------------------------------
     # 1. Recommendation Test

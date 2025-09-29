@@ -4,8 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from flask import Flask
 from models.model_factory import RecommenderFactory, RecommenderModelType
-from models.base_model import Recommender
-from models.content_based.content_based_rec import NoUserFound
+
 
 app = Flask(__name__)
 
@@ -50,11 +49,11 @@ def recommend(userid):
         )
         app.logger.info("Switching to RecommenderModelType.DEEP_LEARNING")
         try:
-            deep_recommender = rf.get_recommender(
-                RecommenderModelType.DEEP_LEARNING
+            default_recommender = rf.get_recommender(
+                RecommenderModelType.MATRIX_FACTOR
             )
-            recommendations = deep_recommender.recommend(user_id=int(userid))
-            response = deep_recommender.format(recommendations)
+            recommendations = default_recommender.recommend(user_id=int(userid))
+            response = default_recommender.format(recommendations)
         except Exception as fallback_error:
             app.logger.error(
                 f"FATAL: Fallback model failed too. Error: {fallback_error}"
