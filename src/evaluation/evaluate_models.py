@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from models.collaborative_filtering.item_based_filtering import ItemBasedFiltering
 from models.collaborative_filtering.helpers import compute_implicit_rating
-from .get_data import get_data, get_random_users
+from .get_data import get_data, get_random_users, get__counts
 
 import time
 
@@ -70,16 +70,16 @@ def evaluate_item_based():
 
 
 def evaluate_average_latency():
-    url = "http://127.0.0.1:8082/recommend"
+    
 
     users= get_random_users()  
 
     latency= 0
     
     for u_id in users:
-       
+        url = f"http://127.0.0.1:8082/recommend/{u_id}"
         params = {
-        "u_id": u_id,
+        "userid": u_id,
         
         }
         start_time = time.time() 
@@ -88,17 +88,23 @@ def evaluate_average_latency():
 
         latency+= end_time - start_time
     
-    print(latency/ len(users))
-    return latency / len(users)
+    print(latency*1000/ len(users))
+    #  return time in milliseconds
+    return latency * 1000/ len(users) 
         
 
-    
 
+def evaluate_training_cost():
+    # query the database to find the number of users, items, and interactions used for the models
+
+    U, I , N = get__counts()
+    top_k=20
+    return top_k *(  U * I - N)
 
 
 if __name__=='__main__':
-    evaluate_average_latency()
-    # evaluate_item_based()
+    # evaluate_average_latency()
+    evaluate_item_based()
    
     
 

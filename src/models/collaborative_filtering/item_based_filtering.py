@@ -1,16 +1,22 @@
 
-from .helpers import compute_similarity, default_recommender, compute_implicit_rating
-from data_processing.db_writer import DBWriter
-from models.base_model import Recommender
-import pandas as pd, numpy as np, joblib
-from evaluation.get_data import get_data
+from .helpers import compute_similarity,  compute_implicit_rating
 
 from models.base_model import Recommender
+import  joblib
+from evaluation.get_data import get_data, get_random_users
+import os 
+from pathlib import Path
+
+print('This is the state')
+
+from models.base_model import Recommender
+
 class ItemBasedFiltering(Recommender):
 
     
     train_set_default, val_set_default, _= get_data()
-    def __init__(self, train_set=train_set_default, val_set=val_set_default,   type='cosine', top_n= 20,alpha=0.6, beta=0.01, lambda_decay=0.01):
+    def __init__(self,train_set= train_set_default, val_set= val_set_default,  type='cosine', top_n= 20,alpha=0.6, beta=0.01, lambda_decay=0.01):
+       
         self.type= type
         self.top_n = top_n
         self.alpha= alpha
@@ -77,10 +83,15 @@ class ItemBasedFiltering(Recommender):
     def recommend(self, user_id):
         # take transpose
         
+        relative_path = os.environ.get('IBF_MODEL_PATH', './models/collaborative_filtering/saved_models/item_based_models.pkl')
+        PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+        self.model_path = PROJECT_ROOT / relative_path
         # load trained model
         itembasedF = joblib.load('./models/collaborative_filtering/saved_models/item_based_models.pkl')
         if user_id not in itembasedF.user_item_matrix.index:
-            return default_recommender(itembasedF.user_item_matrix, self.top_n)
+            #  for now return a random recommendation
+            user_id= get_random_users(count=1)[0]
+
         
         user_ratings = itembasedF.user_item_matrix.loc[user_id].fillna(0)
 
@@ -93,6 +104,11 @@ class ItemBasedFiltering(Recommender):
         return scores.sort_values(ascending=False).head(self.top_n).index.tolist()
 
 
+if __name__ == '__main__':
+     itemBasedF= ItemBasedFiltering()
+     itemBasedF.train()
+
+     print(itemBasedF.recommend(500))
 
 
 

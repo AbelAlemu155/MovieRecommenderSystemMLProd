@@ -52,6 +52,19 @@ def get_random_users(count=500):
     writer.conn.close()
     return [row[0] for row in rows]
 
+
+def get__counts():
+    writer = DBWriter()
+    cursor = writer.conn.cursor()
+
+    cursor.execute("""
+       SELECT COUNT(Distinct user_id), COUNT(Distinct movie_id), COUNT(*)
+        FROM watch_history;
+    """)
+    counts = cursor.fetchone() 
+    writer.conn.close()
+    return counts
+
         
 
 

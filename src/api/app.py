@@ -34,7 +34,7 @@ def recommend(userid):
     app.logger.info(f"Received recommendation request for user ID: {userid}")
 
     rf = RecommenderFactory()
-    recommender_type = RecommenderModelType.MATRIX_FACTOR
+    recommender_type = RecommenderModelType.COLLABORATIVE_FILTERING
     recommendations = []
     response = ""
 
@@ -45,6 +45,7 @@ def recommend(userid):
         recommendations = recommender.recommend(user_id=int(userid))
         response = recommender.format(recommendations)
     except Exception as e:
+        print(e)
         app.logger.warning(
             f"Primary model failed to find user recommendations: {e}"
         )

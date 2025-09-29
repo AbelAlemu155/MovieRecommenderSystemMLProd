@@ -20,6 +20,7 @@ class RecommenderFactory:
     based on a provided model name or ID.
     """
     _MODELS = {
+        
         RecommenderModelType.COLLABORATIVE_FILTERING.value: ItemBasedFiltering,
        
         RecommenderModelType.UBCF.value: UBCFRecommender,
@@ -44,4 +45,4 @@ class RecommenderFactory:
         if model_key in RecommenderFactory._MODELS:
             return RecommenderFactory._MODELS[model_key]()
         else:
-            return CollaborativeFilteringRecommender()
+            return MatrixFactorizationRecommender()
