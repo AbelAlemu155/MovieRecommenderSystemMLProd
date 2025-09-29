@@ -2,12 +2,14 @@
 from .helpers import compute_similarity, default_recommender, compute_implicit_rating
 from data_processing.db_writer import DBWriter
 import pandas as pd, numpy as np, joblib
+from evaluation.evaluate_models import get_data
 
 from models.base_model import Recommender
 class ItemBasedFiltering(Recommender):
 
-
-    def __init__(self, train_set, val_set,   type='cosine', top_n= 20,alpha=0.6, beta=0.01, lambda_decay=0.01):
+    
+    train_set_default, val_set_default, _= get_data()
+    def __init__(self, train_set=train_set_default, val_set=val_set_default,   type='cosine', top_n= 20,alpha=0.6, beta=0.01, lambda_decay=0.01):
         self.type= type
         self.top_n = top_n
         self.alpha= alpha
