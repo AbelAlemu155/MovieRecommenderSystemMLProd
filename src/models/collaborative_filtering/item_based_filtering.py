@@ -1,9 +1,10 @@
 
 from .helpers import compute_similarity, default_recommender, compute_implicit_rating
 from data_processing.db_writer import DBWriter
+from models.base_model import Recommender
 import pandas as pd, numpy as np, joblib
 
-class ItemBasedFiltering:
+class ItemBasedFiltering(Recommender):
 
     def __init__(self, train_set, val_set,   type='cosine', top_n= 20,alpha=0.6, beta=0.01, lambda_decay=0.01):
         self.type= type
