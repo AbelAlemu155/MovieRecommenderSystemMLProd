@@ -18,7 +18,7 @@ class UBCFRecommender(Recommender):
         """
         Fetches ratings data from the database.
         """
-        path_to_db = os.getenv("DB_PATH", "data/movielens.db")
+        path_to_db = os.getenv("DB_PATH", "src/db/home_alone.db")
         engine = create_engine("sqlite:///" + path_to_db)
         ratings_df = pd.read_sql_query("SELECT * FROM ratings where rating > 3", engine)
         return ratings_df
@@ -66,7 +66,7 @@ class UBCFRecommender(Recommender):
             self.utility_matrix = model["utility_matrix"]
             self.user_similarity_df = model["user_similarity_df"]
 
-    def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 5) -> pd.DataFrame:
+    def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 20) -> pd.DataFrame:
         """
         Generates movie recommendations for a specific user using UBCF.
         """
