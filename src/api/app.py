@@ -12,7 +12,7 @@ def recommend(userid):
     print(f"Received recommendation request for user ID: {userid}")
 
     rf = RecommenderFactory()
-    recommender_type = RecommenderModelType.DEEP_LEARNING
+    recommender_type = RecommenderModelType.UBCF
     recommendations = []
     response = ""
     print(f"Using: {recommender_type} for recommendations")
@@ -31,6 +31,7 @@ def recommend(userid):
         except Exception as fallback_error:
             print(f"FATAL: Fallback model failed too. Error: {fallback_error}")
             recommendations = []
+    print(f"Response: {response}")
     return response
 
 if __name__ == '__main__':
