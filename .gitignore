@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 create_project.py
 data/
 
@@ -98,3 +99,122 @@ htmlcov/
 # -------------------------
 .DS_Store
 Thumbs.db
+=======
+create_project.py
+data/
+
+# -------------------------
+# Python artifacts
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.egg
+
+# -------------------------
+# Virtual environments
+# -------------------------
+.venv/
+venv/
+env/
+*env/
+.env
+
+
+# -------------------------
+# Data folders (large/raw/generated)
+# -------------------------
+data/raw/
+data/processed/
+data/external/
+
+# -------------------------
+# Jupyter notebooks
+# -------------------------
+notebooks/.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# -------------------------
+# Logs
+# -------------------------
+logs/
+*.log
+
+# -------------------------
+# Model artifacts
+# -------------------------
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pt
+*.pth
+*.ckpt
+artifacts/
+checkpoints/
+fake_data/
+
+# -------------------------
+# Reports / Docs (generated)
+# -------------------------
+docs/reports/*.html
+docs/reports/*.pdf
+docs/reports/*.csv
+docs/reports/*.xlsx
+
+# -------------------------
+# Docker / Build
+# -------------------------
+docker/*.local.yml
+docker/.env
+*.tar
+*.img
+
+# -------------------------
+# Config overrides / Secrets
+# -------------------------
+configs/*.local.yaml
+configs/*.secret.yaml
+*.env
+
+# -------------------------
+# Test & Coverage
+# -------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+.mypy_cache/
+
+# -------------------------
+# IDE / Editor
+# -------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+
+# -------------------------
+# OS-specific
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Data processing artifacts
+# -------------------------
+
+/src/data_processing/output/
+/src/data_processing/data_queues/
+/src/db/
+/src/src/db
+src/db
+src/data_processing/data_queues/
+src/data_processing/output/
+
+>>>>>>> dcec8bf326e7082aae3d28e3b7601117980c903a
