@@ -13,6 +13,7 @@ __pycache__/
 .eggs/
 *.egg
 
+
 # -------------------------
 # Virtual environments
 # -------------------------
@@ -21,6 +22,8 @@ venv/
 env/
 *env/
 .env
+
+/src/src/db/
 
 # -------------------------
 # Data folders (large/raw/generated)
