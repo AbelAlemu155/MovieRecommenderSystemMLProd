@@ -1,5 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
+import logging
+from logging.handlers import RotatingFileHandler
 from flask import Flask
 from models.model_factory import RecommenderFactory, RecommenderModelType
 from models.base_model import Recommender
@@ -29,9 +31,10 @@ app.logger.addHandler(console_handler)
 @app.route('/recommend/<userid>', methods=['GET'])
 def recommend(userid):
     app.logger.info(f"Received recommendation request for user ID: {userid}")
+    app.logger.info(f"Received recommendation request for user ID: {userid}")
 
     rf = RecommenderFactory()
-    recommender_type = RecommenderModelType.UBCF  # Default model type
+    recommender_type = RecommenderModelType.MATRIX_FACTOR
     recommendations = []
     response = ""
 
