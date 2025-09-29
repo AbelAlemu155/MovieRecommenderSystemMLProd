@@ -115,7 +115,7 @@ class UBCFRecommender(Recommender):
         predictions_df = pd.DataFrame(predictions_df, columns=['predicted_rating'])
         predictions_df.index.name = 'movie_id'
         print(f"Generated {len(predictions_df)} recommendations.")
-        return predictions_df
+        return predictions_df.index
 
 # --- Example Usage ---
 
