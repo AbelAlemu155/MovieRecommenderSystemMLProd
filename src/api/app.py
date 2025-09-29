@@ -15,6 +15,7 @@ def recommend(userid):
     recommender_type = RecommenderModelType.DEEP_LEARNING
     recommendations = []
     response = ""
+    print(f"Using: {recommender_type} for recommendations")
 
     try:
         recommender = rf.get_recommender(recommender_type)
@@ -22,6 +23,7 @@ def recommend(userid):
         response = recommender.format(recommendations)
     except Exception as e:
         print(f"Primary model failed to find user recommendations: {e}")
+        print("Using RecommenderModelType.DEEP_LEARNING")
         try:
             deep_recommender = rf.get_recommender(RecommenderModelType.DEEP_LEARNING)
             recommendations = deep_recommender.recommend(user_id=int(userid))
