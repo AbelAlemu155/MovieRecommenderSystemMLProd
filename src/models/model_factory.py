@@ -4,13 +4,15 @@ from .collaborative_filtering.item_based_filtering import ItemBasedFiltering
 from .ubcf.model import UBCFRecommender
 from .base_model import Recommender
 from enum import Enum
-
+from .content_based.content_based_rec import NoUserFound
+from .matrix_factorization.mf import MatrixFactorizationRecommender
 
 class RecommenderModelType(Enum):
     COLLABORATIVE_FILTERING = "CF"
     CONTENT_BASED = "CB"
     UBCF = "UBCF"
     DEEP_LEARNING = "DL"
+    MATRIX_FACTOR = "MF"
 
 class RecommenderFactory:
     """
@@ -21,6 +23,7 @@ class RecommenderFactory:
         RecommenderModelType.COLLABORATIVE_FILTERING.value: ItemBasedFiltering,
        
         RecommenderModelType.UBCF.value: UBCFRecommender,
+        RecommenderModelType.MATRIX_FACTOR.value: MatrixFactorizationRecommender,
     }
 
     @staticmethod

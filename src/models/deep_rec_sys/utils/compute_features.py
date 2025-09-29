@@ -328,8 +328,8 @@ if __name__ == "__main__":
 
     movie_csv_path = "src/db/movies.csv"
 
-    out_user_npz = "src/models/deep_rec_sys/features/user_features.npz"
-    out_movie_npz = "src/models/deep_rec_sys/features/movie_features.npz"
+    out_user_npz = ".src/models/deep_rec_sys/features/user_features.npz"
+    out_movie_npz = ".src/models/deep_rec_sys/features/movie_features.npz"
 
     os.makedirs(os.path.dirname(out_user_npz), exist_ok=True)
     os.makedirs(os.path.dirname(out_movie_npz), exist_ok=True)
