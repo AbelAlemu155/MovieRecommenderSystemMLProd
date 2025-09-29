@@ -157,7 +157,7 @@ class UBCFRecommender(Recommender):
         Trains the UBCF model, pre-computes Top-K neighbors, and saves components using joblib.
         (Original implementation)
         """
-        # ... original train logic ...
+        
         if df is None:
             df = self.get_ratings_data(from_csv=True)
         
@@ -169,19 +169,19 @@ class UBCFRecommender(Recommender):
         )
         print(f"Utility Matrix Shape: {utility_matrix.shape}")
         
-        # 1. Store User Mapping
+        # store User Mapping
         self.user_to_idx = {user_id: idx for idx, user_id in enumerate(utility_matrix.index)}
         self.idx_to_user = {idx: user_id for user_id, idx in self.user_to_idx.items()}
         
-        # 2. Compute Mean and Normalized Ratings
+        # compute Mean and Normalized Ratings
         self.user_means = utility_matrix.mean(axis=1)
         ratings_normalized = utility_matrix.subtract(self.user_means, axis=0)
         ratings_filled = ratings_normalized.fillna(0)
         
-        # 3. Compute Similarity Matrix (Still needed, but only for training)
+        # compute Similarity Matrix 
         user_similarity_matrix = 1 - pairwise_distances(ratings_filled, metric='cosine')
-        
-        # 4. **Optimization: Pre-calculate and store only Top-K Neighbors**
+
+        # Optimization: Pre-calculate and store only Top-K Neighbors
         print(f"Pre-calculating Top-{self.top_k} neighbors...")
         self.top_k_neighbors = {}
         for user_idx, user_id in enumerate(utility_matrix.index):
@@ -219,16 +219,16 @@ class UBCFRecommender(Recommender):
         self.user_means = model["user_means"]
         self.top_k_neighbors = model["top_k_neighbors"]
         
-    def recommend(self, recommendations: pd.DataFrame) -> str:
-        
-        
+    def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 20) -> str:
+
+        recommendations = self.get_recommendations(user_id=user_id, k=k, n_recommendations=n_recommendations)
         # # return comma-separated movie IDs
         if 'movie_id' in recommendations.columns:
             movie_ids = recommendations['movie_id'].astype(str).tolist()
         else:
             movie_ids = recommendations.index.astype(str).tolist()
 
-        return ",".join(movie_ids)
+        return movie_ids
 
     def evaluate_model(self, test_df: pd.DataFrame, top_n: int = 10, threshold: float = 4.0):
         """
@@ -289,63 +289,7 @@ class UBCFRecommender(Recommender):
         
         return avg_precision, avg_recall, avg_accuracy
 
-# ----------------------------------------------------------------------
-# Matrix Factorization Equivalence
-# ----------------------------------------------------------------------
 
-# UBCF (Memory-Based CF) Equivalence to Matrix Factorization (Model-Based CF)
-
-class MFEquivalence:
-    """
-    Conceptual equivalence to UBCF using Matrix Factorization (MF) principles.
-    In MF, the large, sparse Utility Matrix R is decomposed into two smaller, dense matrices:
-    P (User Latent Factors) and Q (Item Latent Factors).
-
-    This approach is the **ultimate optimization** for scalability and inference speed,
-    as it replaces the need for the large Similarity Matrix and the nearest-neighbor lookup.
-    """
-    def __init__(self, R_matrix: pd.DataFrame, n_factors: int = 50):
-        # R is the utility matrix (Users x Items)
-        self.R = R_matrix 
-        self.n_factors = n_factors
-        self.user_bias = self.R.mean(axis=1) # b_u
-        self.item_bias = self.R.T.mean(axis=1) # b_i
-        self.global_mean = self.R.values.mean() # mu
-        self.P = None # User Latent Factor Matrix (P_u)
-        self.Q = None # Item Latent Factor Matrix (Q_i)
-        
-    def train_concept(self):
-        """
-        Conceptual training step: Decompose R into P and Q.
-        (Actual implementation requires an iterative optimization like SVD/ALS/Gradient Descent,
-        which we skip here to avoid importing external libraries like surprise or scipy).
-        """
-        # --- CONCEPTUAL DECOMPOSITION STEP ---
-        # The result would be two small dense matrices:
-        # self.P (U x n_factors) and self.Q (I x n_factors)
-        print("\n--- Matrix Factorization Equivalence ---")
-        print("MF replaces the large Similarity Matrix with two smaller, dense matrices (P and Q).")
-        print(f"Storage goes from O(U^2) for Similarity Matrix to O(U*F + I*F) for P and Q, where F is n_factors.")
-        print(f"MF Training: Iteratively solving R ≈ Global Mean + b_u + b_i + P Q^T")
-        
-    def predict_concept(self, user_id: int, item_id: int):
-        """
-        Conceptual inference step in MF.
-        The prediction is a fast, fixed-time lookup and dot product.
-        """
-        # Conceptual Prediction Formula (SVD/FunkSVD):
-        # r_hat_ui = mu + b_u + b_i + P_u . Q_i^T
-        
-        # Get conceptual latent vectors (skip actual values)
-        # P_u = self.P.loc[user_id]
-        # Q_i = self.Q.loc[item_id]
-        
-        # Conceptual complexity: O(F) - constant and very fast, independent of U and I size.
-        print("\n--- MF Prediction (Inference) Formula ---")
-        return f"Prediction(u, i) = GlobalMean + UserBias({self.global_mean:.2f}) + ItemBias + (P_u · Q_i^T)"
-        
-
-# --- Example Usage ---
 
 if __name__ == "__main__":
     
@@ -356,24 +300,18 @@ if __name__ == "__main__":
     # 1. Recommendation Test
     # ---------------------------------
     recommendations = recommender.recommend(user_id=1728, k=50, n_recommendations=20)
-    print("\nRecommendations (Optimized UBCF):")
-    print(recommendations.head())
+    print("\nRecommendations")
+    print(recommendations)
     
     # ---------------------------------
     # 2. Evaluation Test
     # ---------------------------------
     # Use 20% of the data for evaluation (conceptually)
-    all_data = recommender.get_ratings_data(from_csv=True)
+    # all_data = recommender.get_ratings_data(from_csv=True)
     # Simple split concept (not robust for time-series evaluation)
-    test_df = all_data.sample(frac=0.2, random_state=42) 
+    # test_df = all_data.sample(frac=0.2, random_state=42) 
     
-    recommender.evaluate_model(test_df, top_n=10, threshold=4.0)
+    # recommender.evaluate_model(test_df, top_n=10, threshold=4.0)
 
-    # ---------------------------------
-    # 3. MF Equivalence Test
-    # ---------------------------------
-    # mf_concept = MFEquivalence(R_matrix=recommender.utility_matrix)
-    # mf_concept.train_concept()
-    # mf_concept.predict_concept(user_id=1728, item_id=200)
     
     
