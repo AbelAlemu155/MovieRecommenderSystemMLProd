@@ -151,12 +151,13 @@ logs/
 *.joblib
 *.h5
 *.onnx
-*.pt
+# *.pt
 *.pth
 *.ckpt
 artifacts/
-checkpoints/
+# checkpoints/
 fake_data/
+# features/
 
 # -------------------------
 # Reports / Docs (generated)
