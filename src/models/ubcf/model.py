@@ -83,12 +83,7 @@ class UBCFRecommender(Recommender):
         """
         if self.utility_matrix is None:
             self.load()
-        # Return a random user_id with at least 3 neighbors (users with non-zero similarity)
-        neighbor_counts = (self.user_similarity_df > 0).sum(axis=1) - 1  # exclude self
-        eligible_users = neighbor_counts[neighbor_counts >= 3].index
-        if len(eligible_users) == 0:
-            return int(np.random.choice(self.utility_matrix.index))
-        return int(np.random.choice(eligible_users))
+        return int(np.random.choice(self.utility_matrix.index))
 
     def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 20) -> pd.DataFrame:
         """
