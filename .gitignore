@@ -49,7 +49,7 @@ logs/
 *.joblib
 *.h5
 *.onnx
-*.pt
+# *.pt
 *.pth
 *.ckpt
 artifacts/
