@@ -42,31 +42,31 @@ class MatrixFactorizationRecommender(Recommender):
             return set(df.loc[df.user_id == uid, "movie_id"].unique().tolist())
         except Exception:
             return set()
-
     def _popularity_top_n(self, n: int, exclude_movie_ids=None) -> pd.Index:
         """
-        Load precomputed popularity from NPZ created during train(), no DB calls.
-        If the NPZ is missing, fall back to a proxy using V's L2 norms.
+        Load precomputed popularity from NPZ (movie_id slugs as strings).
+        If NPZ missing, fall back to ||V_i||_2; item_idx2id will be slugs already.
         """
-        exclude = set(exclude_movie_ids or [])
+        exclude = set(map(str, exclude_movie_ids or []))  # ensure strings
+
         try:
             data = np.load(self.popularity_path)
-            movie_ids = data["movie_ids"]
-            scores = data["scores"]
+            movie_ids = data["movie_ids"].astype(str)       # keep as strings
+            scores    = data["scores"].astype(np.float64, copy=False)
         except Exception:
+            # Fallback: rank by item-factor norm; item_idx2id are slugs
             if self.V is None:
                 if self.factors_path.exists():
                     self.load()
                 else:
                     return pd.Index([])
-
-            movie_ids = np.array(self.item_idx2id, dtype=np.int64)
-            scores = np.linalg.norm(self.V, axis=1)
+            movie_ids = np.asarray(self.item_idx2id, dtype=str)
+            scores    = np.linalg.norm(self.V, axis=1).astype(np.float64, copy=False)
 
         if exclude:
-            mask = ~np.isin(movie_ids, np.fromiter(exclude, dtype=np.int64))
+            mask = ~np.isin(movie_ids, np.fromiter((s for s in exclude), dtype=movie_ids.dtype))
             movie_ids = movie_ids[mask]
-            scores = scores[mask]
+            scores    = scores[mask]
 
         if movie_ids.size == 0:
             return pd.Index([])
@@ -74,7 +74,8 @@ class MatrixFactorizationRecommender(Recommender):
         k = min(n, movie_ids.size)
         topk_idx = np.argpartition(scores, -k)[-k:]
         topk_idx = topk_idx[np.argsort(scores[topk_idx])[::-1]]
-        return pd.Index(movie_ids[topk_idx].tolist())
+        return pd.Index(movie_ids[topk_idx].tolist())  # returns slug IDs
+
 
     # Train, save and load
     def train(self, df: pd.DataFrame | None = None):
@@ -115,14 +116,27 @@ class MatrixFactorizationRecommender(Recommender):
             item_users[ii].append((ui, r.rating_centered))
 
         # precompute popularity
+        df = df.copy()
+        df = df.dropna(subset=["movie_id", "rating"])
+        df["movie_id"] = df["movie_id"].astype(str)
+        df["rating"]   = pd.to_numeric(df["rating"], errors="coerce")
+        df = df.dropna(subset=["rating"])
+        df["rating"] = df["rating"].astype(np.float64)
         grp = df.groupby('movie_id').agg(v=('rating', 'count'), R=('rating', 'mean')).reset_index()
         C = df['rating'].mean()
         m = max(int(grp['v'].quantile(0.60)), 5)
         scores = (grp['v'] / (grp['v'] + m)) * grp['R'] + (m / (grp['v'] + m)) * C
+
+        finite_mask = np.isfinite(scores.to_numpy(dtype=np.float64))
+        grp = grp.loc[finite_mask].reset_index(drop=True)
+        scores = scores.loc[finite_mask].reset_index(drop=True)
+
         np.savez_compressed(
             self.popularity_path,
-            movie_ids=grp['movie_id'].to_numpy(),
-            scores=scores.to_numpy(dtype=np.float64)
+            movie_ids=grp['movie_id'].to_numpy(dtype=np.str_),
+            scores=scores.to_numpy(dtype=np.float64),
+            C=np.float64(C),
+            m=np.int64(m),
         )
 
         regI = self.reg * np.eye(k)
