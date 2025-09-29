@@ -17,7 +17,11 @@ Examples:
     ContentBasedRecommender().train()
 
   Recommend from a user_id:
-    ContentBasedRecommender().recommend(user_id=int(userid), k=20)
+   recommendations = ContentBasedRecommender().recommend(user_id=int(userid), k=20)
+
+  ALTERNATIVE (run this file directly):
+    python src/models/content_based/content_based_rec.py
+
 """
 from __future__ import annotations
 
@@ -272,13 +276,13 @@ class ContentBasedRecommender(Recommender):
         """
         db_path = "src/db/home_alone.db" 
         table = "movies"
-        save_path = "src/models/content_based/artifacts/"
+        save_path = "src/models/content_based/artifacts"
+        model_path = os.path.join(save_path, "model.joblib")
         os.makedirs(save_path, exist_ok=True)
-        saved_model_path = os.path.join(save_path, "model.joblib")
         settings = Settings()
         df = _load_sqlite(db_path, table=table)
         rec = ContentBasedRecommender(settings=settings).train_model(df)
-        return rec.save(saved_model_path)
+        return rec.save(model_path)
 
     # ---- recommend ----
     def _recommend_from_row(self, row: int, k: int) -> List[Tuple[str, float]]:
@@ -448,6 +452,17 @@ def _load_sqlite(db_path: str, table: str = "movies") -> pd.DataFrame:
 #     else:
 #         raise SystemExit("Provide either --user_id for recommendation")
 
+def demo ():
+    #add a flag that ensures that train is run only once. As long as model is saved, no need to retrain
+    print("Checking for existing model...")
+    if not os.path.exists("src/models/content_based/artifacts/model.joblib"):
+        print("Model file not found. Training model...")
+        ContentBasedRecommender().train()
+        print("Model trained and saved.")
+    
+    print("Model file found. Skipping training.")
+    print("Generating recommendations for user_id 56:")
+    print(ContentBasedRecommender().recommend(user_id=int(56), k=20))
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    demo()
