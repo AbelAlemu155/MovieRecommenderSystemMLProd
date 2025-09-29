@@ -76,6 +76,15 @@ class UBCFRecommender(Recommender):
             self.utility_matrix = model["utility_matrix"]
             self.user_similarity_df = model["user_similarity_df"]
 
+    def recommend_random_user(self) -> int:
+        """
+        Returns the user_id of a random user from the utility matrix.
+        Useful when the user does not exist in the data.
+        """
+        if self.utility_matrix is None:
+            self.load()
+        return int(np.random.choice(self.utility_matrix.index))
+
     def recommend(self, user_id: int, k: int = 5, n_recommendations: int = 20) -> pd.DataFrame:
         """
         Generates movie recommendations for a specific user using UBCF.
@@ -89,14 +98,18 @@ class UBCFRecommender(Recommender):
         user_similarity_df = self.user_similarity_df
       
         if user_id not in utility_matrix.index:
-            return pd.DataFrame({'message': [f"User ID {user_id} not found in the data."]})
+            user_id = self.recommend_random_user()
+
         
         similar_users = user_similarity_df[user_id].sort_values(ascending=False).drop(user_id)
         knn = similar_users.head(k)
         
         if knn.empty:
             # return pd.DataFrame({'message': ["No similar users found."]})
-            raise ValueError("No similar users found.")
+            user_id = self.recommend_random_user()
+            similar_users = user_similarity_df[user_id].sort_values(ascending=False).drop(user_id)
+            knn = similar_users.head(k)
+            
         
         neighbor_ratings = utility_matrix.loc[knn.index]
         neighbor_weights = knn.values
