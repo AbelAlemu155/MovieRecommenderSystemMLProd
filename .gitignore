@@ -55,7 +55,6 @@ logs/
 artifacts/
 checkpoints/
 fake_data/
-features/
 
 # -------------------------
 # Reports / Docs (generated)
