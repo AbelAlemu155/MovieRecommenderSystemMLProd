@@ -1,0 +1,34 @@
+{
+  "cutoffs": {
+    "train_end": "2025-08-25 16:58:21.800000+00:00",
+    "val_end": "2025-08-30 00:48:37.600000+00:00"
+  },
+  "splits": {
+    "train": 44427,
+    "val": 9520,
+    "test": 9520
+  },
+  "K": 20,
+  "tuned": {
+    "UBCF": {
+      "precision_val": 0.004443145279158141,
+      "k_neighbors": 20
+    }
+  },
+  "precision_at_K_test": {
+    "UBCF": 0.0040011597564511454
+  },
+  "latency_ms_test_known": {
+    "UBCF": {
+      "p50_ms": 6.148367,
+      "p95_ms": 10.726446,
+      "n": 200
+    }
+  },
+  "model_size_MB": {
+    "UBCF": 246.98
+  },
+  "training_cost_Gops": {
+    "UBCF": 377.05
+  }
+}

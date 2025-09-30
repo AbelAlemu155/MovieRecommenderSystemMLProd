@@ -42,6 +42,7 @@ class MatrixFactorizationRecommender(Recommender):
             return set(df.loc[df.user_id == uid, "movie_id"].unique().tolist())
         except Exception:
             return set()
+    
     def _popularity_top_n(self, n: int, exclude_movie_ids=None) -> pd.Index:
         """
         Load precomputed popularity from NPZ (movie_id slugs as strings).
@@ -75,7 +76,6 @@ class MatrixFactorizationRecommender(Recommender):
         topk_idx = np.argpartition(scores, -k)[-k:]
         topk_idx = topk_idx[np.argsort(scores[topk_idx])[::-1]]
         return pd.Index(movie_ids[topk_idx].tolist())  # returns slug IDs
-
 
     # Train, save and load
     def train(self, df: pd.DataFrame | None = None):
@@ -171,6 +171,7 @@ class MatrixFactorizationRecommender(Recommender):
 
         # store
         self.U, self.V = U, V
+        # self.user_means = user_means
         np.savez_compressed(self.factors_path, U=U, V=V, k=k)
         with open(self.maps_path, "wb") as f:
             pickle.dump(
@@ -179,10 +180,11 @@ class MatrixFactorizationRecommender(Recommender):
                     "item_id2idx": self.item_id2idx,
                     "user_idx2id": self.user_idx2id,
                     "item_idx2id": self.item_idx2id,
-                    "user_means": user_means.to_dict(),  # needed to re-add mean on scoring if desired
+                    "user_means": user_means.to_dict(),
                 },
                 f,
             )
+        
 
     def load(self):
         data = np.load(self.factors_path)

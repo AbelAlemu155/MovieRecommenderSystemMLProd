@@ -159,7 +159,7 @@ class UBCFRecommender(Recommender):
         """
         
         if df is None:
-            df = self.get_ratings_data(from_csv=True)
+            df = self.get_ratings_data(from_csv=False)
         
         print("--- Training UBCF Model (Optimized) ---")
         utility_matrix = df.pivot_table(
