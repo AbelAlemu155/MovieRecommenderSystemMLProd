@@ -1,7 +1,7 @@
-<<<<<<< HEAD
 create_project.py
 data/
-
+db/*.db
+*.pkl
 # -------------------------
 # Python artifacts
 # -------------------------
@@ -24,9 +24,8 @@ env/
 # -------------------------
 # Data folders (large/raw/generated)
 # -------------------------
-data/raw/
-data/processed/
-data/external/
+data_processing/data_queues/
+data_processing/data_queues/*.csv
 
 # -------------------------
 # Jupyter notebooks
@@ -99,9 +98,6 @@ htmlcov/
 # -------------------------
 .DS_Store
 Thumbs.db
-=======
-create_project.py
-data/
 
 # -------------------------
 # Python artifacts
@@ -126,13 +122,6 @@ env/
 
 
 # -------------------------
-# Data folders (large/raw/generated)
-# -------------------------
-data/raw/
-data/processed/
-data/external/
-
-# -------------------------
 # Jupyter notebooks
 # -------------------------
 notebooks/.ipynb_checkpoints/
@@ -147,17 +136,14 @@ logs/
 # -------------------------
 # Model artifacts
 # -------------------------
-# *.pkl
+*.pkl
 *.joblib
 *.h5
 *.onnx
-# *.pt
+*.pt
 *.pth
 *.ckpt
 artifacts/
-# checkpoints/
-fake_data/
-# features/
 
 # -------------------------
 # Reports / Docs (generated)
@@ -210,12 +196,8 @@ Thumbs.db
 # Data processing artifacts
 # -------------------------
 
-
-/src/data_processing/output/
-/src/data_processing/data_queues/
-/src/db/
-/src/src/db
-src/db
-src/data_processing/data_queues/
-src/data_processing/output/
+homealone/db/
+homealone/data_processing/data_queues/
+homealone/data_processing/output/
+homealone/data_processing/cache/
 
