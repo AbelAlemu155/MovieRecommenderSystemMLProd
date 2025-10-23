@@ -1,0 +1,5 @@
+dotenv
+numpy<2.0
+joblib
+sqlalchemy
+logging
