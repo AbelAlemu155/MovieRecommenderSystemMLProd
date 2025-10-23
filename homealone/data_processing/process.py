@@ -59,6 +59,7 @@ class DataProcessor:
         
         for message in self.kafka_client.consume():
             processed_message = self.process_data(message)
+            
             self.data_queue.enqueue_data(processed_message)
                 
             
