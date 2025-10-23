@@ -44,9 +44,39 @@ services:
       - training
     restart: on-failure
 
+  kafka_processor:
+    build:
+      context: homealone/data_processing
+      dockerfile: Dockerfile
+    command: python /app/data_processing/process.py
+    environment:
+      - TUNNEL_USER=${TUNNEL_USER}
+      - TUNNEL_IP=${TUNNEL_IP}
+      - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
+      - TUNNEL_PORT=${TUNNEL_PORT}
+    volumes:
+      - db_data:/app/db
+      - data_queues:/app/data_queues
+    restart: on-failure
+
+  db_writer:
+    build:
+      context: homealone/data_processing
+      dockerfile: Dockerfile
+    command: python /app/data_processing/db_writer.py
+    volumes:
+      - db_data:/app/db
+      - data_queues:/app/data_queues
+    restart: on-failure
+    depends_on:
+      kafka_processor:
+        condition: service_started
+
 #Define a shared volume for the model file
 volumes:
   model_storage:
     driver: local
   db_data:
+    driver: local
+  data_queues:
     driver: local
