@@ -4,12 +4,15 @@ import os
 import glob
 from dotenv import load_dotenv
 import time
+from tqdm import tqdm
 
 class DBWriter:
     def __init__(self):
         load_dotenv()
-        self.db_path = os.getenv('DB_PATH', 'src/db/home_alone.db')
-        self.data_dir = os.getenv('DATA_DIR', 'src/data_processing/data_queues/')
+        # self.db_path = os.getenv('DB_PATH', 'homealone/db/home_alone.db')
+        self.db_path = '/app/db/home_alone.db'
+        # self.data_dir = os.getenv('DATA_QUEUE_DIR', 'homealone/data_processing/data_queues/')
+        self.data_dir = "/app/data_queues/"
         
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         os.makedirs(self.data_dir, exist_ok=True)
@@ -178,17 +181,20 @@ class DBWriter:
         all_files = glob.glob(os.path.join(self.data_dir, "*.csv"))
         
         
-        for file in all_files:
+        for file in tqdm(all_files, desc="Processing data files", unit="file"):
+        # for file in all_files:
             
             if 'movies' in file or 'ratings' in file:
                 df = pd.read_csv(file)
                 print(f"Processing {file}")
                 if 'movies' in file:
+                    print("Updating watch history...")
                     grouped = df.groupby(['userid', 'movieid']).agg({'minute': 'count', 'time': ['min', 'max']}).reset_index()
                     grouped.columns = ['userid', 'movieid', 'minute', 'start_time', 'last_watch']
                     self.update_watch_history(grouped)
                     os.remove(file)
-                elif 'ratings' in file:                       
+                elif 'ratings' in file:
+                    print("Updating ratings...")
                     grouped = df.groupby(['userid', 'movieid']).agg({'time': 'max', 'rating': 'max'}).reset_index()
                     grouped.columns = ['userid', 'movieid', 'rated_at', 'rating']
                     self.update_ratings(grouped)

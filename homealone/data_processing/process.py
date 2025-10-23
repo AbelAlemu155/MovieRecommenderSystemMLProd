@@ -1,11 +1,11 @@
-from data_ingestion.kafka_pipeline import KafkaSSHClient
+from kafka_pipeline import KafkaSSHClient
 import os
 from dotenv import load_dotenv
 from kafka.errors import NoBrokersAvailable
 import re
 import pandas as pd
 import time
-import data_processing.data_queue as dq
+import data_queue as dq
 
 class DataProcessor:
     def __init__(self, kafka_client: KafkaSSHClient):
@@ -13,7 +13,8 @@ class DataProcessor:
         self.data_queue = dq.DataQueue()
 
     def process_data(self, data):
-        # movie log line matching        
+        processed_data = None
+        # movie log line matching 
         movie_pattern = r'^([^,]+),([^,]+),GET /data/m/([^/]+)/([^\.]+)\.mpg$'
         match = re.match(movie_pattern, data)
         if match:
@@ -59,7 +60,8 @@ class DataProcessor:
         
         for message in self.kafka_client.consume():
             processed_message = self.process_data(message)
-            self.data_queue.enqueue_data(processed_message)
+            if processed_message:
+                self.data_queue.enqueue_data(processed_message)
                 
             
             
