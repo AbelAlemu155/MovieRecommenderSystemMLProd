@@ -165,12 +165,11 @@ def recommend(user_id):
         if user_id.isdigit():
             raw_user_id = int(user_id)
         else:
-            raw_user_id = user_id # Keep as string if not numeric
+            return jsonify({"error": "user_id must be an integer."}), 400
     except ValueError:
         return jsonify({"error": "Invalid user_id format."}), 400
 
     try:
-        
         inner_uid = trainset.to_inner_uid(raw_user_id)
         logging.info(f"User {raw_user_id} mapped to inner ID {inner_uid}.")
     except ValueError:

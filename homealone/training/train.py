@@ -91,10 +91,7 @@ class Trainning:
         rmse = accuracy.rmse(predictions)
         return rmse
 
-    def save_model(self, model, file_path):
-        print(f"Saving model to {file_path}...")
-        dump.dump(file_path, algo=model)
-        print("Model saved.")
+
 
 if __name__ == "__main__":
     
