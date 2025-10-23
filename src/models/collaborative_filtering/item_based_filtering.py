@@ -7,7 +7,7 @@ from evaluation.get_data import get_data, get_random_users
 import os 
 from pathlib import Path
 
-print('This is the state')
+
 
 from models.base_model import Recommender
 
