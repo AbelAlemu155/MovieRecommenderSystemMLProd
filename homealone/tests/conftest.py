@@ -149,3 +149,129 @@ def expected_recommendation_data():
         "recommendations": "movie1,movie2,movie3",
         "responsetime": "150ms"
     }
+
+
+
+# ============================================================================
+# DB Writer Fixtures
+# ============================================================================
+
+@pytest.fixture
+def sample_watch_history_data():
+    """Sample watch history data for validation"""
+    return [
+        {
+            'user_id': 'user123',
+            'movie_id': 'movie456',
+            'total_watch_time': 5,
+            'start_time': '2023-10-25 10:30:15',
+            'last_watch': '2023-10-25 10:35:20'
+        }
+    ]
+
+
+@pytest.fixture
+def sample_watch_history_df():
+    """Sample watch history DataFrame"""
+    import pandas as pd
+    return pd.DataFrame([{
+        'userid': 'user123',
+        'movieid': 'movie456',
+        'minute': 5,
+        'start_time': '2023-10-25 10:30:15',
+        'last_watch': '2023-10-25 10:35:20'
+    }])
+
+
+@pytest.fixture
+def multiple_watch_history_df():
+    """Multiple watch history records DataFrame"""
+    import pandas as pd
+    return pd.DataFrame([
+        {
+            'userid': 'user123',
+            'movieid': 'movie456',
+            'minute': 5,
+            'start_time': '2023-10-25 10:30:15',
+            'last_watch': '2023-10-25 10:35:20'
+        },
+        {
+            'userid': 'user789',
+            'movieid': 'movie101',
+            'minute': 10,
+            'start_time': '2023-10-25 11:00:00',
+            'last_watch': '2023-10-25 11:10:00'
+        }
+    ])
+
+
+@pytest.fixture
+def sample_ratings_df():
+    """Sample ratings DataFrame"""
+    import pandas as pd
+    return pd.DataFrame([{
+        'userid': 'user789',
+        'movieid': 'movie101',
+        'rating': '4',
+        'rated_at': '2023-10-25 10:31:20'
+    }])
+
+
+@pytest.fixture
+def multiple_ratings_df():
+    """Multiple ratings records DataFrame"""
+    import pandas as pd
+    return pd.DataFrame([
+        {
+            'userid': 'user789',
+            'movieid': 'movie101',
+            'rating': '4',
+            'rated_at': '2023-10-25 10:31:20'
+        },
+        {
+            'userid': 'user123',
+            'movieid': 'movie456',
+            'rating': '5',
+            'rated_at': '2023-10-25 10:32:00'
+        },
+        {
+            'userid': 'user555',
+            'movieid': 'movie789',
+            'rating': '3',
+            'rated_at': '2023-10-25 10:33:15'
+        }
+    ])
+
+
+@pytest.fixture
+def sample_movie_csv_df():
+    """Sample movie CSV DataFrame with raw data"""
+    import pandas as pd
+    return pd.DataFrame([
+        {
+            'userid': 'user123',
+            'movieid': 'movie456',
+            'minute': 1,
+            'time': '2023-10-25 10:30:15'
+        },
+        {
+            'userid': 'user123',
+            'movieid': 'movie456',
+            'minute': 2,
+            'time': '2023-10-25 10:35:20'
+        }
+    ])
+
+
+@pytest.fixture
+def sample_rating_csv_df():
+    """Sample rating CSV DataFrame with raw data"""
+    import pandas as pd
+    return pd.DataFrame([
+        {
+            'userid': 'user789',
+            'movieid': 'movie101',
+            'rating': '4',
+            'time': '2023-10-25 10:31:20'
+        }
+    ])
