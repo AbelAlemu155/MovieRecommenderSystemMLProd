@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 class DBReader:
     def __init__(self, db_path=None):
         load_dotenv()
-        self.db_path = db_path or os.getenv('DB_PATH', 'src/db/home_alone.db')
+        self.db_path = db_path or os.getenv('DB_PATH', 'homealone/db/home_alone.db')
         self.conn = sqlite3.connect(self.db_path)
 
     def get_watch_history(self, user_id=None, movie_id=None):

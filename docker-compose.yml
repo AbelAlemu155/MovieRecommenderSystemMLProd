@@ -1,52 +1,70 @@
-version: '3.8'
-
 services:
   training:
-    # TODO: Build the container using the training Dockerfile
     build:
       context: homealone/training
       dockerfile: Dockerfile
-    # TODO: Use the shared volume to store the trained model
     volumes:
-      - model_storage:/app/models
-      - db_data:/app/db
-    # Set it to restart when it fails
+      - ./homealone/models:/app/models
+      - ./homealone/db:/app/db
     restart: on-failure
 
   db:
-    # Build the container using the db Dockerfile
     build:
       context: homealone/db
       dockerfile: Dockerfile
-    # Use the shared volume to store the database
     volumes:
-      - model_storage:/app/models
-      - db_data:/app/db
-    # Expose port 5000 for any database-related services (if needed)
+      - ./homealone/models:/app/models
+      - ./homealone/db:/app/db
     ports:
-      - "5000:5000"
+      - "5001:5000"
     restart: on-failure
 
   inference:
-    # TODO: Build the container using the inference Dockerfile
     build:
       context: homealone/inference
       dockerfile: Dockerfile
-    # TODO: Use the shared volume to load the trained model
     volumes:
-      - model_storage:/app/models
-      - db_data:/app/db
-    # TODO: Expose port 8080 (or any other port) for the Flask app
+      - ./homealone/models:/app/models
+      - ./homealone/db:/app/db
     ports: 
       - "8080:8080"
-    #Ensure that the inference service starts after the training service is complete
     depends_on:
       - training
     restart: on-failure
+
+  kafka_processor:
+    build:
+      context: homealone/data_processing
+      dockerfile: Dockerfile
+    command: python /app/data_processing/process.py
+    environment:
+      - TUNNEL_USER=${TUNNEL_USER}
+      - TUNNEL_IP=${TUNNEL_IP}
+      - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
+      - TUNNEL_PORT=${TUNNEL_PORT}
+    volumes:
+      - db_data:/app/db
+      - data_queues:/app/data_queues
+    restart: on-failure
+
+  db_writer:
+    build:
+      context: homealone/data_processing
+      dockerfile: Dockerfile
+    command: python /app/data_processing/db_writer.py
+    volumes:
+      - db_data:/app/db
+      - data_queues:/app/data_queues
+    restart: on-failure
+    depends_on:
+      kafka_processor:
+        condition: service_started
 
 #Define a shared volume for the model file
 volumes:
   model_storage:
     driver: local
   db_data:
+    driver: local
+  data_queues:
     driver: local

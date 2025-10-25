@@ -2,6 +2,7 @@ create_project.py
 data/
 db/*.db
 *.pkl
+homealone/models/*.dumps
 # -------------------------
 # Python artifacts
 # -------------------------
@@ -200,4 +201,3 @@ homealone/db/
 homealone/data_processing/data_queues/
 homealone/data_processing/output/
 homealone/data_processing/cache/
-
