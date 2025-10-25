@@ -1,19 +1,15 @@
 import sqlite3
-import pandas as pd
-from surprise import Dataset, Reader, SVD, KNNBasic, NMF  # Import NMF
+from surprise import SVD, KNNBasic, NMF  # Import NMF
 from surprise.model_selection import train_test_split
-from surprise import accuracy
-from surprise import dump      # Import the dump module for saving
+from surprise import dump     
 import logging
 from logging.handlers import RotatingFileHandler
-import logging
-from logging.handlers import RotatingFileHandler
-from flask import Flask
 import os
-from flask import Flask, jsonify, abort
-from surprise import dump  # We only need 'dump' from surprise for loading
+from flask import Flask, jsonify, abort, g
 import pickle
 import random
+from telemetry import Telemetry
+import time
 
 # We load these ONCE at startup
 model_svd = None
@@ -81,7 +77,6 @@ def load_resources():
     except Exception as e:
         print(f"An error occurred during resource loading: {e}")
         raise
-
 
 def prepare_fallback_pool(trainset, min_ratings=1, min_avg_rating=3.0):
     """
@@ -159,6 +154,8 @@ def recommend(user_id):
     Generate recommendations for a given user_id.
     """
     print(f"Received recommendation request for user_id: {user_id}")
+    conn = sqlite3.connect('db/home_alone.db')
+    telemetry = Telemetry(conn)
     try:
         # 1. Convert user_id from URL to the correct type.
         # Check if user_id is purely numeric first
@@ -174,9 +171,13 @@ def recommend(user_id):
         logging.info(f"User {raw_user_id} mapped to inner ID {inner_uid}.")
     except ValueError:
         logging.warning(f"User {raw_user_id} not found in trainset. Using fallback recommendations.")
-        response =  get_random_fallback(fallback_pool, n=20)
-        
-        return jsonify(response)
+        recommendation_response =  get_random_fallback(fallback_pool, n=20)
+        telemetry.log('recommendation', {
+            'user_id': raw_user_id,
+            'recommended_items': recommendation_response,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        })
+        return jsonify(recommendation_response)
 
     # 3. Find all items the user has NOT rated (efficiently)
     rated_items_inner = {iid for (iid, r) in trainset.ur[inner_uid]}
@@ -190,20 +191,28 @@ def recommend(user_id):
     ]
 
     if not testset_for_user:
-        response =  get_random_fallback(fallback_pool, n=20)
-        return jsonify(response), 200
-        
-    # 5. Get predictions from all models
+        recommendation_response =  get_random_fallback(fallback_pool, n=20)
+        telemetry.log('recommendation', {
+            'user_id': raw_user_id,
+            'recommended_items': recommendation_response,
+            'timestamp': None
+        })
+        return jsonify(recommendation_response), 200
+
     svd_predictions = model_svd.test(testset_for_user)
     # knn_predictions = model_knn.test(testset_for_user)
     # nmf_predictions = model_nmf.test(testset_for_user)
 
-    response = get_top_n(svd_predictions, n=20)
+    recommendation_response = get_top_n(svd_predictions, n=20)
+    telemetry.log('recommendation', {
+        'user_id': raw_user_id,
+        'recommended_items': recommendation_response,
+        'timestamp': None
+    })
+    return jsonify(recommendation_response)
 
-    return jsonify(response)
 
 
-# --- Run the App ---
 if __name__ == '__main__':
     # Load all models and data before starting the server
     logging.info("Starting server, loading resources...")

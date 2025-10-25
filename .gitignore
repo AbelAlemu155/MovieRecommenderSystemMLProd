@@ -2,6 +2,7 @@ create_project.py
 data/
 db/*.db
 *.pkl
+homealone/models/*.dumps
 # -------------------------
 # Python artifacts
 # -------------------------

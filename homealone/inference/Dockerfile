@@ -16,9 +16,10 @@ RUN pip install -r requirements.txt
 
 # Copy the inference script to the working directory
 COPY server.py ./server.py
+COPY telemetry.py ./telemetry.py
 
 # Shared volume for model
-VOLUME ["/app/models"]
+VOLUME ["/app/models", "/app/db"]
 
 CMD ["python", "server.py"]
 

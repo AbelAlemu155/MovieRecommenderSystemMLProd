@@ -119,9 +119,9 @@ class DataProcessor:
                 self.data_queue.enqueue_data(processed_message)
                 logger.debug(f"Message enqueued: {processed_message['type']}")
             else:
-                logger.info(f"Skipping invalid message: {message}, with type: {processed_message['type'] if processed_message else 'unknown'}")
-
-
+                logger.info(f"Skipping invalid message: {message}, with type: {processed_message['type'] if processed_message else 'unknown'}")                
+            
+            
 if __name__ == "__main__":
     load_dotenv()
 
