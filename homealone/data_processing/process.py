@@ -1,11 +1,11 @@
-from kafka_pipeline import KafkaSSHClient
+from homealone.data_processing.kafka_pipeline import KafkaSSHClient
 import os
 from dotenv import load_dotenv
 from kafka.errors import NoBrokersAvailable
 import re
 import pandas as pd
 import time
-import data_queue as dq
+import homealone.data_processing.data_queue as dq
 
 class DataProcessor:
     def __init__(self, kafka_client: KafkaSSHClient):
