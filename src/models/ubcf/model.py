@@ -289,13 +289,10 @@ class UBCFRecommender(Recommender):
         
         return avg_precision, avg_recall, avg_accuracy
 
-
-
 if __name__ == "__main__":
     
     recommender = UBCFRecommender()
     recommender.train()
-    
     # ---------------------------------
     # 1. Recommendation Test
     # ---------------------------------
