@@ -285,13 +285,62 @@ Tests the DBWriter class for database operations and file processing.
 
 ---
 
+## Training Module Tests
+
+### 6. `test_feature_transformation.py` — [homealone/tests/test_training/test_feature_transformation.py](homealone/tests/test_training/test_feature_transformation.py)
+Tests feature transformations in the training pipeline using the Surprise library.
+
+**Total: 21 tests**
+
+#### **Data Loading Tests** (2 tests)
+- Loads ratings from SQLite database (user_id, movie_id, rating)
+- Validates DataFrame structure for Surprise library
+
+#### **Surprise Reader Transformation Tests** (3 tests)
+- Rating scale definition (1-5)
+- Dataset creation from DataFrame
+- Handles edge case ratings (min/max boundaries, duplicates, floats)
+
+#### **Trainset Building Tests** (3 tests)
+- Builds full trainset from dataset
+- Maintains rating scale information
+- Builds anti-testset (unrated items for evaluation)
+
+#### **ID Mapping Transformation Tests** (4 tests)
+- Raw ID to internal ID mapping (user_id, movie_id → inner IDs)
+- Reverse mapping (inner IDs → raw IDs)
+- Round-trip ID conversion verification
+- All raw IDs have inner mappings
+- Unknown ID error handling
+
+#### **User-Item Matrix Structure Tests** (2 tests)
+- Trainset user-item rating structure validation
+- Global mean rating computation
+
+#### **Data Validation Tests** (3 tests)
+- Handles ratings outside valid scale (< 1, > 5)
+- Empty DataFrame handling
+- Single rating handling
+
+#### **Integration Tests** (1 test)
+- Complete load_data transformation pipeline (matching train.py)
+
+#### **Key Transformations Tested**:
+- **User/Movie ID Encoding**: Raw string IDs → integer inner IDs for model training
+- **Rating Scale Normalization**: Defines 1-5 rating scale for Surprise library
+- **Trainset/Testset Building**: Full trainset for training, anti-testset for unrated items
+- **ID Bidirectional Mapping**: Supports prediction (inner IDs) and result interpretation (raw IDs)
+
+---
+
 ## Test Summary
 
 ### Total Test Count by Module:
 - **Schema Validation**: 70 tests (38 schemas + 32 validator)
 - **Data Processing**: 95 tests (28 kafka + 30 process + 37 db_writer)
+- **Training**: 21 tests (21 feature_transformation)
 
-### **Grand Total: 165 tests**
+### **Grand Total: 186 tests**
 
 ### Key Testing Patterns Used:
 1. **Parametrized tests** - Testing multiple values efficiently
