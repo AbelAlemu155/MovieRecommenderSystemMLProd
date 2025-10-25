@@ -1,13 +1,13 @@
-from kafka_pipeline import KafkaSSHClient
 import os
 from dotenv import load_dotenv
-from kafka.errors import NoBrokersAvailable
 import re
 import pandas as pd
 import time
 
-import homealone.data_queue as dq
-from homealone.data_ingestion.kafka_pipeline import KafkaSSHClient
+from kafka.errors import NoBrokersAvailable
+from kafka_pipeline import KafkaSSHClient
+import data_queue as dq
+
 # import schema validation manager and schemas
 import logging
 from homealone.data_processing.schema_validation.validator import ValidationManager

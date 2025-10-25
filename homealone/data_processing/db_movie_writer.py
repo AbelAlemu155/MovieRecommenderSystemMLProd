@@ -3,10 +3,10 @@ import pandas as pd
 import sqlite3
 from dotenv import load_dotenv
 import glob
-from movie_data import MovieDataProcessor
 import time
 
-from homealone.data_processing.movie_data import MovieDataProcessor
+from movie_data import MovieDataProcessor
+
 # import schema validation manager and schemas
 import logging
 from homealone.data_processing.schema_validation.validator import ValidationManager
