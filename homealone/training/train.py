@@ -116,6 +116,6 @@ if __name__ == "__main__":
         trainer.save_trainset()
         print("All models and trainset saved.")
         # wait for some time before retraining
-        time.sleep(60)  # Sleep for 60 seconds
+        time.sleep(60*60*12)  # Train every 12 hours
         trainer.load_data()
         

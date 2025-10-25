@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, abort, g
 import pickle
 import random
-from .telemetry import Telemetry
+from telemetry import Telemetry
 import time
 
 # We load these ONCE at startup
