@@ -92,7 +92,7 @@ def sample_rating_log():
 @pytest.fixture
 def sample_recommendation_log():
     """Sample recommendation request log"""
-    return "2023-10-25 10:32:00,user555,recommendation request server1, status 200, result: movie1,movie2,movie3, 150ms"
+    return "2023-10-25 10:32:00,user555,recommendation request server1, status 200, result: movie1,movie2,movie3, 150 ms"
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ def sample_log_batch():
         "2023-10-25 10:30:15,user1,GET /data/m/movie1/1.mpg",
         "2023-10-25 10:30:16,user2,GET /rate/movie2=5",
         "invalid message",
-        "2023-10-25 10:30:17,user3,recommendation request server1, status 200, result: m1,m2, 50ms",
+        "2023-10-25 10:30:17,user3,recommendation request server1, status 200, result: m1,m2, 50 ms",
         "2023-10-25 10:30:18,user1,GET /data/m/movie3/10.mpg",
     ]
 
@@ -147,7 +147,7 @@ def expected_recommendation_data():
         "server": "server1",
         "status": "200",
         "recommendations": "movie1,movie2,movie3",
-        "responsetime": "150ms"
+        "responsetime": 150.0
     }
 
 
