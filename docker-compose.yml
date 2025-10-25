@@ -8,16 +8,16 @@ services:
       - ./homealone/db:/app/db
     restart: on-failure
 
-  db:
-    build:
-      context: homealone/db
-      dockerfile: Dockerfile
-    volumes:
-      - ./homealone/models:/app/models
-      - ./homealone/db:/app/db
-    ports:
-      - "5001:5000"
-    restart: on-failure
+  # db:
+  #   build:
+  #     context: homealone/db
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - ./homealone/models:/app/models
+  #     - ./homealone/db:/app/db
+  #   ports:
+  #     - "5001:5000"
+  #   restart: on-failure
 
   inference:
     build:
@@ -63,8 +63,6 @@ services:
 #Define a shared volume for the model file
 volumes:
   model_storage:
-    driver: local
-  db_data:
     driver: local
   data_queues:
     driver: local
