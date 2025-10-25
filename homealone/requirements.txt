@@ -1,5 +1,8 @@
 dotenv
-numpy<2.0
+numpy<2
 joblib
 sqlalchemy
-logging
+httpx
+pytest
+pytest-cov
+pandas

@@ -1,8 +1,3 @@
-"""
-Shared pytest fixtures for all tests.
-Place this file at tests/conftest.py
-"""
-
 import pytest
 from unittest.mock import MagicMock, Mock
 
