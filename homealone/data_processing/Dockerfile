@@ -9,14 +9,14 @@ RUN apt-get update && apt-get install -y \
     openssh-client \
     procps \
     sqlite3 \
-    && rm -rf /var/lib/apt/lists/
+    && rm -rf /var/lib/apt/lists/*
 
 # Setup working directory
 WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY . ./data_processing/
 
