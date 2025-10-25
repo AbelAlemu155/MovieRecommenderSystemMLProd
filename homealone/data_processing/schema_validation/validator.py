@@ -1,5 +1,5 @@
 from pydantic import ValidationError, BaseModel
-from typing import List, Type, Tuple
+from typing import List, Type, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class ValidationManager:
             'invalid_records': 0
         }
     
-    def validate_record(self, record: dict, schema: Type[BaseModel]) -> Tuple[bool, BaseModel | None, str]:
+    def validate_record(self, record: dict, schema: Type[BaseModel]) -> Tuple[bool, Optional[BaseModel], str]:
         """
         Validate a single record against schema
         
