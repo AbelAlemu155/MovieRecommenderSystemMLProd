@@ -8,8 +8,8 @@ from tqdm import tqdm
 
 # import schema validation manager and schemas
 import logging
-from schema_validation.validator import ValidationManager
-from schema_validation.schemas import WatchHistoryRecord, RatingRecord
+from homealone.data_processing.schema_validation.validator import ValidationManager
+from homealone.data_processing.schema_validation.schemas import WatchHistoryRecord, RatingRecord
 
 # Configure logging
 logging.basicConfig(
