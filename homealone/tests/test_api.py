@@ -1,6 +1,6 @@
 # tests/test_api.py
 from fastapi.testclient import TestClient
-from homealone.service.server import app
+from homealone.inference.server import app
 
 def test_contract():
     c = TestClient(app)
