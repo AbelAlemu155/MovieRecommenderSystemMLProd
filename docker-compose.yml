@@ -16,7 +16,7 @@ services:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
     ports:
-      - "5000:5000"
+      - "5001:5000"
     restart: on-failure
 
   inference:
