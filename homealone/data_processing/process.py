@@ -29,6 +29,23 @@ class DataProcessor:
         logger.info("DataProcessor initialized with ValidationManager")
 
     def process_data(self, data):
+        # normalize incoming data: support Kafka message objects, bytes, and stray whitespace
+        if hasattr(data, 'value'):
+            # kafka message objects often carry payload in .value
+            try:
+                data = data.value
+            except Exception:
+                pass
+        if isinstance(data, (bytes, bytearray)):
+            try:
+                data = data.decode('utf-8')
+            except Exception:
+                data = data.decode(errors='ignore')
+        if not isinstance(data, str):
+            # make a safe conversion
+            data = str(data)
+        data = data.strip()
+
         processed_data = None
         # movie log line matching 
         movie_pattern = r'^([^,]+),([^,]+),GET /data/m/([^/]+)/([^\.]+)\.mpg$'
@@ -57,7 +74,8 @@ class DataProcessor:
             }
 
         # is it recommendation request
-        recommendation_pattern = r'^([^,]+),([^,]+),recommendation request ([^,]+), status (\d+), result: (.+), (\d+) ms$'
+        # Accept either '150ms' or '150 ms' (optional space before 'ms')
+        recommendation_pattern = r'^([^,]+),([^,]+),recommendation request ([^,]+), status (\d+), result: (.+), (\d+)\s*ms$'
         match = re.match(recommendation_pattern, data)
         if match:
             time, userid, server, status, recommendations, responsetime = match.groups()
