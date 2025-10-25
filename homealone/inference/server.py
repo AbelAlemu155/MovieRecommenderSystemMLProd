@@ -219,5 +219,5 @@ if __name__ == '__main__':
     load_resources()
     
     # Run the app
-    logging.info("Server ready. Access at http://127.0.0.1:8080/recommend/<user_id>")
-    app.run(debug=True, port=8080, host='0.0.0.0')
+    logging.info("Server ready. Access at http://127.0.0.1:8082/recommend/<user_id>")
+    app.run(debug=True, port=8082, host='0.0.0.0')
