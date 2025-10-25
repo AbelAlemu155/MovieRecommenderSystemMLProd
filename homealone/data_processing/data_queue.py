@@ -12,7 +12,8 @@ class DataQueue:
         
         # queue_folder 
         load_dotenv()
-        self.queue_folder = os.getenv("DATA_QUEUE_DIR", "src/data_processing/data_queues/")
+        # self.queue_folder = os.getenv("DATA_QUEUE_DIR", "homealone/data_processing/data_queues/")
+        self.queue_folder = "/app/data_queues/"
         
         # create folder if not exists
         if not os.path.exists(self.queue_folder):
@@ -37,25 +38,23 @@ class DataQueue:
     
     
     def movie_id_in_cache(self, movie_id):
-        cache_file = os.path.join("src/data_processing/cache/", 'movieids.csv')
+        cache_file = os.path.join("homealone/data_processing/cache/", 'movieids.csv')
         if not os.path.exists(cache_file):
             return False
         df = pd.read_csv(cache_file)
         return movie_id in df['movie_id'].values
     
     def movie_ids_queue(self, data):
-        
-        
-
-        self.movie_ids.add(data['movieid'])
-        if len(self.movie_ids) >= 100:
-            timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
-            with open(f"{self.queue_folder}movieids_{timestamp}.csv", "a") as f:
-                f.write(f"movie_id\n")
-                for movie_id in self.movie_ids:
-                    f.write(f"{movie_id}\n")
-            print(f"Saved {len(self.movie_ids)} movie IDs to movieids_{timestamp}.csv")
-            self.movie_ids = set()  # reset set
+        pass
+        # self.movie_ids.add(data['movieid'])
+        # if len(self.movie_ids) >= 100:
+        #     timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+        #     with open(f"{self.queue_folder}movieids_{timestamp}.csv", "a") as f:
+        #         f.write(f"movie_id\n")
+        #         for movie_id in self.movie_ids:
+        #             f.write(f"{movie_id}\n")
+        #     print(f"Saved {len(self.movie_ids)} movie IDs to movieids_{timestamp}.csv")
+        #     self.movie_ids = set()  # reset set
         
     def user_ids_queue(self, data):
         self.user_ids.add(data['userid'])
