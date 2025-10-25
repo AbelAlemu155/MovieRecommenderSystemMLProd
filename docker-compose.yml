@@ -43,8 +43,8 @@ services:
       - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
       - TUNNEL_PORT=${TUNNEL_PORT}
     volumes:
-      - db_data:/app/db
-      - data_queues:/app/data_queues
+      - ./homealone/db:/app/db
+      - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
 
   db_writer:
@@ -53,8 +53,8 @@ services:
       dockerfile: Dockerfile
     command: python /app/data_processing/db_writer.py
     volumes:
-      - db_data:/app/db
-      - data_queues:/app/data_queues
+      - ./homealone/db:/app/db
+      - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
     depends_on:
       kafka_processor:
