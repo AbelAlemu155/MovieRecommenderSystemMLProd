@@ -1,3 +1,4 @@
+from kafka_pipeline import KafkaSSHClient
 import os
 from dotenv import load_dotenv
 from kafka.errors import NoBrokersAvailable
@@ -5,7 +6,7 @@ import re
 import pandas as pd
 import time
 
-import homealone.data_processing.data_queue as dq
+import homealone.data_queue as dq
 from homealone.data_ingestion.kafka_pipeline import KafkaSSHClient
 # import schema validation manager and schemas
 import logging
@@ -29,7 +30,7 @@ class DataProcessor:
 
     def process_data(self, data):
         processed_data = None
-        # movie log line matching
+        # movie log line matching 
         movie_pattern = r'^([^,]+),([^,]+),GET /data/m/([^/]+)/([^\.]+)\.mpg$'
         match = re.match(movie_pattern, data)
         if match:

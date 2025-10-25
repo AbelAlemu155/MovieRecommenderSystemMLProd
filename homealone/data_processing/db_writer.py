@@ -4,6 +4,7 @@ import os
 import glob
 from dotenv import load_dotenv
 import time
+from tqdm import tqdm
 # import schema validation manager and schemas
 import logging
 from homealone.data_processing.schema_validation.validator import ValidationManager
@@ -20,10 +21,11 @@ logger = logging.getLogger(__name__)
 class DBWriter:
     def __init__(self):
         load_dotenv()
-        self.db_path = os.getenv('DB_PATH', 'src/db/home_alone.db')
-        self.data_dir = os.getenv(
-            'DATA_DIR', 'src/data_processing/data_queues/')
-
+        # self.db_path = os.getenv('DB_PATH', 'homealone/db/home_alone.db')
+        self.db_path = '/app/db/home_alone.db'
+        # self.data_dir = os.getenv('DATA_QUEUE_DIR', 'homealone/data_processing/data_queues/')
+        self.data_dir = "/app/data_queues/"
+        
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         os.makedirs(self.data_dir, exist_ok=True)
 
@@ -138,85 +140,25 @@ class DBWriter:
         Process all CSV files in data queue directory and write to database with validation.
         """
         all_files = glob.glob(os.path.join(self.data_dir, "*.csv"))
-
-        if not all_files:
-            logger.info("No CSV files to process")
-            return
-
-        logger.info(f"Found {len(all_files)} CSV files to process")
-
-        for file in all_files:
-            try:
-                if 'movies' in file or 'ratings' in file:
-                    logger.info(f"Processing {file}")
-                    df = pd.read_csv(file)
-
-                    if 'movies' in file:
-                        # Aggregate movie watch data
-                        grouped = df.groupby(['userid', 'movieid']).agg(
-                            {'minute': 'count', 'time': ['min', 'max']}).reset_index()
-                        grouped.columns = ['userid', 'movieid',
-                                           'minute', 'start_time', 'last_watch']
-                        # Rename columns to match schema
-                        grouped_renamed = grouped.rename(columns={
-                            'userid': 'user_id',
-                            'movieid': 'movie_id',
-                            'minute': 'total_watch_time'
-                        })
-                        # Convert DataFrame to list of dictionaries
-                        records_list = grouped_renamed.to_dict('records')
-                        valid_records, invalid_records = self.validate_db_data(
-                            records_list, WatchHistoryRecord)
-                        if valid_records:
-                            # Convert validated pydantic models back to DataFrame
-                            valid_df = pd.DataFrame([record.model_dump() for record in valid_records])
-                            # Rename columns back for database insertion
-                            valid_df = valid_df.rename(columns={
-                                'user_id': 'userid',
-                                'movie_id': 'movieid',
-                                'total_watch_time': 'minute'
-                            })
-                            self.update_watch_history(valid_df)
-                        if invalid_records:
-                            logger.warning(f"Found {len(invalid_records)} invalid watch history records")
-
-                    elif 'ratings' in file:
-                        # Aggregate rating data
-                        grouped = df.groupby(['userid', 'movieid']).agg(
-                            {'time': 'max', 'rating': 'max'}).reset_index()
-                        grouped.columns = [
-                            'userid', 'movieid', 'rated_at', 'rating']
-                        # Rename columns to match schema
-                        grouped_renamed = grouped.rename(columns={
-                            'userid': 'user_id',
-                            'movieid': 'movie_id'
-                        })
-                        # Convert DataFrame to list of dictionaries
-                        records_list = grouped_renamed.to_dict('records')
-                        valid_records, invalid_records = self.validate_db_data(
-                            records_list, RatingRecord)
-                        if valid_records:
-                            # Convert validated pydantic models back to DataFrame
-                            valid_df = pd.DataFrame([record.model_dump() for record in valid_records])
-                            # Rename columns back for database insertion
-                            valid_df = valid_df.rename(columns={
-                                'user_id': 'userid',
-                                'movie_id': 'movieid'
-                            })
-                            self.update_ratings(valid_df)
-                        if invalid_records:
-                            logger.warning(f"Found {len(invalid_records)} invalid rating records")
-
-                    # Remove file after successful processing
-                    try:
-                        os.remove(file)
-                        logger.debug(f"Removed processed file: {file}")
-                    except OSError as e:
-                        logger.error(f"Failed to remove file {file}: {e}")
-
-            except pd.errors.EmptyDataError:
-                logger.warning(f"Skipping empty CSV file: {file}")
-                try:
+        
+        
+        for file in tqdm(all_files, desc="Processing data files", unit="file"):
+        # for file in all_files:
+            
+            if 'movies' in file or 'ratings' in file:
+                df = pd.read_csv(file)
+                print(f"Processing {file}")
+                if 'movies' in file:
+                    print("Updating watch history...")
+                    grouped = df.groupby(['userid', 'movieid']).agg({'minute': 'count', 'time': ['min', 'max']}).reset_index()
+                    grouped.columns = ['userid', 'movieid', 'minute', 'start_time', 'last_watch']
+                    self.update_watch_history(grouped)
+                    os.remove(file)
+                elif 'ratings' in file:
+                    print("Updating ratings...")
+                    grouped = df.groupby(['userid', 'movieid']).agg({'time': 'max', 'rating': 'max'}).reset_index()
+                    grouped.columns = ['userid', 'movieid', 'rated_at', 'rating']
+                    self.update_ratings(grouped)
                     os.remove(file)
                 except OSError as e:
                     logger.error(f"Failed to remove empty file {file}: {e}")

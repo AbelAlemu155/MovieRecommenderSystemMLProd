@@ -3,6 +3,7 @@ import pandas as pd
 import sqlite3
 from dotenv import load_dotenv
 import glob
+from movie_data import MovieDataProcessor
 import time
 
 from homealone.data_processing.movie_data import MovieDataProcessor
@@ -23,9 +24,9 @@ class MovieDBWriter:
     
     def __init__(self):
         load_dotenv()
-        self.db_path = os.getenv('DB_PATH', 'src/db/home_alone.db')
-        self.data_dir = os.getenv('DATA_DIR', 'src/data_processing/data_queues/')
-        self.cache_dir = os.getenv('CACHE_DIR', 'src/data_processing/cache/')
+        self.db_path = os.getenv('DB_PATH', 'homealone/db/home_alone.db')
+        self.data_dir = os.getenv('DATA_DIR', 'homealone/data_processing/data_queues/')
+        self.cache_dir = os.getenv('CACHE_DIR', 'homealone/data_processing/cache/')
         
         
         self.conn = sqlite3.connect(self.db_path)
