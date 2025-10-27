@@ -115,10 +115,10 @@ def get_random_fallback(pool, n=20):
     Gets N random movies from the pre-compiled pool.
     """
     num_to_sample = min(n, len(pool))
-    
+
     if num_to_sample == 0:
-        return []
-        
+        return ""
+
     # 'pool' is now a list of dicts, random.sample works directly
     random_fallback = random.sample(pool, num_to_sample)
     # sort avg_rating descending
@@ -138,7 +138,7 @@ def get_top_n(predictions, n=20):
     
     top_n_list = [pred.iid for pred in top_n_preds]
 
-    return ",".join(top_n_list)
+    return ",".join([str(iid) for iid in top_n_list])
 
 
 # --- Initialize the Flask App ---
