@@ -39,7 +39,7 @@ def test_is_tunnel_running_detects_existing_tunnel(mock_process_iter, kafka_clie
     mock_proc.info = {
         "cmdline": [
             "ssh", "-L", "9092:localhost:9092",
-            "testuser@testhost.com", "-NT"  # ✅ Changed from "user@host.com"
+            "testuser@testhost.com", "-NT"
         ]
     }
     mock_process_iter.return_value = [mock_proc]
@@ -192,7 +192,7 @@ def test_consume_uses_default_parameters(mock_ensure, mock_consumer_class, kafka
         "movielog10",
         bootstrap_servers="localhost:9092",
         group_id="team10-consumer-group",
-        auto_offset_reset="earliest",
+        auto_offset_reset="latest",
         enable_auto_commit=False
     )
 
