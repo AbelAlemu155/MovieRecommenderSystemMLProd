@@ -20,5 +20,5 @@ COPY train.py ./train.py
 VOLUME ["/app/models", "/app/db"]
 
 
-CMD ["python", "train.py"]
+CMD ["python", "train_new.py"]
 

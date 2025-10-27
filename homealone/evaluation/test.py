@@ -1,40 +1,84 @@
-# from src.models.content_based.content_based_rec import ContentBasedRecommender
+# src/evaluation/test.py
+import unittest, importlib
+import pandas as pd
+import math
+
+# Import module regardless of package root layout
+try:
+    mod = importlib.import_module("evaluation.offline_eval")
+except ImportError:
+    mod = importlib.import_module("src.evaluation.offline_eval")
+
+time_split = getattr(mod, "time_split")
+evaluate = getattr(mod, "evaluate")
 
 
-# # ContentBasedRecommender().train()
+class TestOfflineEval(unittest.TestCase):
+    def test_time_split_basic(self):
+        df = pd.DataFrame({
+            "user_id": [1, 1, 2, 2],
+            "movie_id": ["A", "B", "C", "D"],
+            "rating": [5, 3, 4, 2],
+            "rated_at": ["2025-01-05", "2025-01-12", "2025-01-18", "2025-01-25"],
+        })
+        tr, va, te = time_split(df, "2025-01-10", "2025-01-20")
+        self.assertEqual((len(tr), len(va), len(te)), (1, 2, 1))
+
+    def test_metrics_correctness(self):
+        # user1 likes A,C; user2 likes B  (threshold=4.0)
+        test_df = pd.DataFrame({
+            "user_id": [1, 1, 2],
+            "movie_id": ["A", "C", "B"],
+            "rating": [5.0, 4.0, 5.0],
+            "rated_at": ["2025-02-01", "2025-02-01", "2025-02-02"],
+        })
+        # user1 -> ["A","X","Y"]; user2 -> ["Z","B","Q"]
+        def rec(uid: int, k: int):
+            return {1: ["A", "X", "Y"], 2: ["Z", "B", "Q"]}.get(uid, [])[:k]
+
+        res = evaluate(rec, test_df, k=3, thr=4.0)
+
+        # Expected averages across users:
+        # P=1/3 ≈ 0.3333, R=0.75, HR=1.0, NDCG≈0.621, MAP=0.5, users=2
+        self.assertAlmostEqual(res["precision"], 1/3, places=4)
+        self.assertAlmostEqual(res["recall"], 0.75, places=4)
+        self.assertAlmostEqual(res["hit_rate"], 1.0, places=4)
+        self.assertTrue(0.60 <= res["ndcg"] <= 0.63)
+        self.assertAlmostEqual(res["map"], 0.5, places=3)
+        self.assertEqual(res["users"], 2)
+
+    def test_threshold_effect(self):
+        # Stricter threshold should not increase recall
+        test_df = pd.DataFrame({
+            "user_id": [1, 1, 2],
+            "movie_id": ["A", "C", "B"],
+            "rating": [5.0, 4.0, 5.0],
+            "rated_at": ["2025-02-01", "2025-02-01", "2025-02-02"],
+        })
+        def rec(uid: int, k: int):
+            return {1: ["A", "C"], 2: ["B"]}.get(uid, [])[:k]
+
+        low_thr = evaluate(rec, test_df, k=10, thr=4.0)
+        high_thr = evaluate(rec, test_df, k=10, thr=5.0)
+        self.assertGreaterEqual(low_thr["recall"], high_thr["recall"])
+
+    def test_empty_predictions(self):
+        # With relevant truth but empty preds, metrics should be zeros; users counted
+        test_df = pd.DataFrame({
+            "user_id": [1],
+            "movie_id": ["A"],
+            "rating": [5.0],
+            "rated_at": ["2025-02-01"],
+        })
+        def rec(uid: int, k: int): return []
+        res = evaluate(rec, test_df, k=5, thr=4.0)
+        self.assertEqual(res["users"], 1)
+        self.assertEqual(res["precision"], 0.0)
+        self.assertEqual(res["recall"], 0.0)
+        self.assertEqual(res["ndcg"], 0.0)
+        self.assertEqual(res["hit_rate"], 0.0)
+        self.assertEqual(res["map"], 0.0)
 
 
-# m = ContentBasedRecommender().recommend(user_id=int(56), k=20)
-# print(m)
-
-
-
-
-from .get_data import get_data
-from models.collaborative_filtering.item_based_filtering import ItemBasedFiltering
-
-query = """
-                SELECT 
-                    WH.user_id,
-                    WH.movie_id,
-                    WH.total_watch_time,
-                    WH.last_watch,
-                    (julianday(WH.last_watch) - julianday(WH.start_time)) * 24*60 AS gap_watch,
-                    R.rating, 
-                    m.runtime
-                FROM watch_history AS WH
-                JOIN movies as m ON m.movie_id = WH.movie_id
-                LEFT JOIN ratings AS R
-                ON WH.user_id = R.user_id AND WH.movie_id = R.movie_id;
-                    """
-train_df, val_df, test_df= get_data(query)
-
-
-    # get ground truth using implicit rating
-    #  take the relevant for the gorundtruth
-
-
-    #  first train the model
-model= ItemBasedFiltering(train_set= train_df, val_set=val_df)
-model.train()
-print(model.recommend(user_id=56))
+if __name__ == "__main__":
+    unittest.main()
