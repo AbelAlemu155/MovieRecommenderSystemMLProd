@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, abort, g
 import pickle
 import random
-from telemetry import Telemetry
+from .telemetry import Telemetry
 import time
 
 # We load these ONCE at startup
@@ -154,7 +154,7 @@ def recommend(user_id):
     Generate recommendations for a given user_id.
     """
     print(f"Received recommendation request for user_id: {user_id}")
-    conn = sqlite3.connect('db/home_alone.db')
+    conn = sqlite3.connect('db/home_alone.db', timeout=30)
     telemetry = Telemetry(conn)
     try:
         # 1. Convert user_id from URL to the correct type.

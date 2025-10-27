@@ -1,5 +1,15 @@
 import pytest
 from unittest.mock import MagicMock, Mock, patch
+import sys
+
+# Mock modules before importing DataProcessor
+# These need to be mocked because process.py imports them directly
+sys.modules['kafka_pipeline'] = MagicMock()
+sys.modules['data_queue'] = MagicMock()
+sys.modules['schema_validation'] = MagicMock()
+sys.modules['schema_validation.validator'] = MagicMock()
+sys.modules['schema_validation.schemas'] = MagicMock()
+
 from homealone.data_processing.process import DataProcessor
 
 
@@ -147,7 +157,7 @@ def test_process_recommendation_log_basic(mock_kafka_client, sample_recommendati
     assert result["server"] == "server1"
     assert result["status"] == "200"
     assert result["recommendations"] == "movie1,movie2,movie3"
-    assert result["responsetime"] == "150ms"
+    assert result["responsetime"] == 150.0
 
 
 def test_process_recommendation_log_matches_expected_structure(
@@ -176,16 +186,16 @@ def test_process_recommendation_log_various_status_codes(mock_kafka_client, stat
 
 @pytest.mark.parametrize("log_line,expected_server,expected_responsetime", [
     (
-        "2023-10-25 10:32:00,user555,recommendation request server1, status 200, result: m1,m2, 50ms",
-        "server1", "50ms"
+        "2023-10-25 10:32:00,user555,recommendation request server1, status 200, result: m1,m2, 50 ms",
+        "server1", 50.0
     ),
     (
-        "2024-01-10 14:00:00,user123,recommendation request server2, status 200, result: none, 250ms",
-        "server2", "250ms"
+        "2024-01-10 14:00:00,user123,recommendation request server2, status 200, result: none, 250 ms",
+        "server2", 250.0
     ),
     (
-        "2024-02-20 18:30:00,userXYZ,recommendation request prod-server, status 200, result: a,b,c,d, 1500ms",
-        "prod-server", "1500ms"
+        "2024-02-20 18:30:00,userXYZ,recommendation request prod-server, status 200, result: a,b,c,d, 1500 ms",
+        "prod-server", 1500.0
     ),
 ])
 def test_process_recommendation_log_various_formats(
@@ -260,16 +270,22 @@ def test_process_data_prints_for_invalid_log(mock_print, mock_kafka_client, inva
 # Run Method Tests
 # ============================================================================
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
-def test_run_processes_single_message(mock_queue_class, mock_kafka_client):
+def test_run_processes_single_message(mock_queue_class, mock_validator_class, mock_kafka_client):
     """Test run method processes a single message"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     mock_kafka_client.consume.return_value = iter([
         "2023-10-25 10:30:15,user123,GET /data/m/movie456/12.mpg"
     ])
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
     
@@ -285,14 +301,20 @@ def test_run_processes_single_message(mock_queue_class, mock_kafka_client):
     assert call_args["userid"] == "user123"
 
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
-def test_run_processes_multiple_messages(mock_queue_class, mock_kafka_client, sample_log_batch):
+def test_run_processes_multiple_messages(mock_queue_class, mock_validator_class, mock_kafka_client, sample_log_batch):
     """Test run method processes multiple messages"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     mock_kafka_client.consume.return_value = iter(sample_log_batch)
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
     
@@ -300,19 +322,25 @@ def test_run_processes_multiple_messages(mock_queue_class, mock_kafka_client, sa
     assert mock_queue_instance.enqueue_data.call_count == 4
 
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
-def test_run_skips_invalid_messages(mock_queue_class, mock_kafka_client):
+def test_run_skips_invalid_messages(mock_queue_class, mock_validator_class, mock_kafka_client):
     """Test run method skips invalid messages"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     messages = [
         "2023-10-25 10:30:15,user123,GET /data/m/movie456/12.mpg",
         "invalid,log,data",
         "2023-10-25 10:31:20,user789,GET /rate/movie101=4"
     ]
     mock_kafka_client.consume.return_value = iter(messages)
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
     
@@ -320,34 +348,46 @@ def test_run_skips_invalid_messages(mock_queue_class, mock_kafka_client):
     assert mock_queue_instance.enqueue_data.call_count == 2
 
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
-def test_run_handles_empty_consumer(mock_queue_class, mock_kafka_client):
+def test_run_handles_empty_consumer(mock_queue_class, mock_validator_class, mock_kafka_client):
     """Test run method handles empty message stream"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     mock_kafka_client.consume.return_value = iter([])
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
-    
+
     # No messages should be enqueued
     mock_queue_instance.enqueue_data.assert_not_called()
 
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
-def test_run_enqueues_all_message_types(mock_queue_class, mock_kafka_client):
+def test_run_enqueues_all_message_types(mock_queue_class, mock_validator_class, mock_kafka_client):
     """Test run method enqueues all three message types correctly"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     messages = [
         "2023-10-25 10:30:15,user1,GET /data/m/movie1/1.mpg",
         "2023-10-25 10:30:16,user2,GET /rate/movie2=5",
         "2023-10-25 10:30:17,user3,recommendation request server1, status 200, result: m1, 50ms",
     ]
     mock_kafka_client.consume.return_value = iter(messages)
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
     
@@ -367,14 +407,20 @@ def test_run_enqueues_all_message_types(mock_queue_class, mock_kafka_client):
 # Integration Tests
 # ============================================================================
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
-def test_full_pipeline_integration(mock_queue_class, mock_kafka_client, sample_log_batch):
+def test_full_pipeline_integration(mock_queue_class, mock_validator_class, mock_kafka_client, sample_log_batch):
     """Test complete pipeline with mixed messages"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     mock_kafka_client.consume.return_value = iter(sample_log_batch)
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
     
@@ -400,22 +446,28 @@ def test_full_pipeline_integration(mock_queue_class, mock_kafka_client, sample_l
     assert calls[3][0][0]["movieid"] == "movie3"
 
 
+@patch('homealone.data_processing.process.ValidationManager')
 @patch('homealone.data_processing.process.dq.DataQueue')
 @patch('builtins.print')
-def test_run_prints_for_all_messages(mock_print, mock_queue_class, mock_kafka_client):
+def test_run_prints_for_all_messages(mock_print, mock_queue_class, mock_validator_class, mock_kafka_client):
     """Test that run prints status for all messages"""
     mock_queue_instance = MagicMock()
     mock_queue_class.return_value = mock_queue_instance
-    
+
+    # Mock validator to return valid data
+    mock_validator_instance = MagicMock()
+    mock_validator_instance.validate_record.return_value = (True, {}, None)
+    mock_validator_class.return_value = mock_validator_instance
+
     messages = [
         "2023-10-25 10:30:15,user1,GET /data/m/movie1/1.mpg",
         "invalid,log,data",
     ]
     mock_kafka_client.consume.return_value = iter(messages)
-    
+
     processor = DataProcessor(kafka_client=mock_kafka_client)
     processor.run()
-    
+
     # Should print for both messages (valid and invalid)
     assert mock_print.call_count == 2
 
