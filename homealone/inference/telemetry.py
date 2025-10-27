@@ -1,16 +1,14 @@
 import sqlite3
 
+
 class Telemetry:
     
     def __init__(self, conn):
         self.db_connection = conn
-        # delete existing tables and recreate for fresh logging
-        cursor = self.db_connection.cursor()
-        cursor.execute("DROP TABLE IF EXISTS recommendations")
-        self.db_connection.commit()
         self._setup()
 
     def _setup(self):
+        """Create tables if they don't exist"""
         cursor = self.db_connection.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS recommendations (
@@ -38,5 +36,8 @@ class Telemetry:
             recommended_items=excluded.recommended_items, timestamp=excluded.timestamp
         """, (user_id, recommended_items, timestamp))
         self.db_connection.commit()
+<<<<<<< HEAD
 
     
+=======
+>>>>>>> e22ab9087cedcf91932fb026dea9c8a11004a088

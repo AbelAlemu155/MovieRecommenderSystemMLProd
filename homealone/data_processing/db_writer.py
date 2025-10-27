@@ -116,7 +116,7 @@ class DBWriter:
                 row['start_time'],
                 row['last_watch']
             ))
-            self.conn.commit()
+        self.conn.commit()
 
     def update_ratings(self, data):
         cursor = self.conn.cursor()
@@ -134,7 +134,7 @@ class DBWriter:
                 row['rating'],
                 row['rated_at']
             ))
-            self.conn.commit()
+        self.conn.commit()
 
     def process_files(self):
         """
@@ -237,7 +237,6 @@ class DBWriter:
             except Exception as e:
                 logger.error(
                     f"Error processing file {file}: {e}", exc_info=True)
-
         logger.info("All files processed.")
 
     def close(self):

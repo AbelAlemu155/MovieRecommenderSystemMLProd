@@ -28,6 +28,7 @@ jobs:
           pip install -r homealone/requirements.txt
           pip install -r homealone/data_processing/requirements.txt
           pip install -r homealone/inference/requirements.txt
+          pip install -r homealone/monitoring/requirements.txt
 
       - name: Run tests with coverage
         env:

@@ -20,6 +20,7 @@ fallback_pool = []
 # --- Define file paths ---
 # Paths are absolute, as used in container environments
 MODEL_DIR = "/app/models"
+DATABASE = '/app/db/home_alone.db'
 TRAINSET_PATH = os.path.join(MODEL_DIR, "trainset.dump")
 SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
 KNN_MODEL_PATH = os.path.join(MODEL_DIR, "knn_model.dump")
@@ -143,6 +144,22 @@ def get_top_n(predictions, n=20):
 # --- Initialize the Flask App ---
 app = Flask(__name__)
 
+def get_db():
+    """Get database connection for current request"""
+    if 'db' not in g:
+        g.db = sqlite3.connect(DATABASE, timeout=30.0)
+        # Enable WAL mode for better concurrency
+        g.db.execute('PRAGMA journal_mode=WAL')
+        g.db.execute('PRAGMA synchronous=NORMAL')
+    return g.db
+
+@app.teardown_appcontext
+def close_db(error):
+    """Close database connection at end of request"""
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
 @app.route('/')
 def hello():
     return 'Home Alone Recommendation API is running!'
@@ -154,7 +171,7 @@ def recommend(user_id):
     Generate recommendations for a given user_id.
     """
     print(f"Received recommendation request for user_id: {user_id}")
-    conn = sqlite3.connect('db/home_alone.db', timeout=30)
+    conn = get_db()
     telemetry = Telemetry(conn)
     print
     try:
@@ -222,5 +239,5 @@ if __name__ == '__main__':
     load_resources()
     
     # Run the app
-    logging.info("Server ready. Access at http://127.0.0.1:8080/recommend/<user_id>")
-    app.run(debug=True, port=8080, host='0.0.0.0')
+    logging.info("Server ready. Access at http://127.0.0.1:8082/recommend/<user_id>")
+    app.run(debug=True, port=8082, host='0.0.0.0')
