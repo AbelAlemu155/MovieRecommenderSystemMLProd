@@ -15,7 +15,6 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY train.py ./train.py
-COPY train_new.py ./train_new.py
 
 # Store model in a shared volume
 VOLUME ["/app/models", "/app/db"]
