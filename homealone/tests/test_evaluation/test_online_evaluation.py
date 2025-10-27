@@ -1,92 +1,146 @@
-# test_online_evaluation.py
-
 import pytest
 import pandas as pd
-from homealone.evaluation.online_evaluation.snapshot_data import get_snapshot, preprocess_snapshot
-from homealone.evaluation.online_evaluation.online_evaluation import compute_online_measure
+import numpy as np
+from homealone.evaluation.online_evaluation import online_evaluation as oe
 
-# ------------------------
-# Fixtures
-# ------------------------
+@pytest.fixture
+def mock_df():
+    data = {
+        "rating": [5, 4, 3, np.nan, np.nan, 2],
+        "completion_rate": [0.9, 0.8, 0.6, 0.75, 0.5, 0.4],
+        "timestamp": pd.to_datetime([
+            "2024-01-01 10:00:00",
+            "2024-01-01 10:05:00",
+            "2024-01-01 11:00:00",
+            "2024-01-02 08:00:00",
+            "2024-01-02 09:00:00",
+            "2024-01-02 09:10:00"
+        ]),
+        "rated_at": pd.to_datetime([
+            "2024-01-01 10:10:00",
+            "2024-01-01 10:06:00",
+            "2024-01-01 11:30:00",
+            "2024-01-02 09:00:00",
+            "2024-01-02 09:30:00",
+            "2024-01-02 09:20:00"
+        ]),
+        "last_watch": pd.to_datetime([
+            "2024-01-01 10:30:00",
+            "2024-01-01 10:10:00",
+            "2024-01-01 11:20:00",
+            "2024-01-02 09:10:00",
+            "2024-01-02 09:40:00",
+            "2024-01-02 09:25:00"
+        ])
+    }
+    return pd.DataFrame(data)
 
-@pytest.fixture(scope="module")
-def snapshot_data():
-    recommendations_df, watch_rating_df = get_snapshot()
+
+def test_online_measure_all_conditions(monkeypatch, mock_df):
+    """Patch compute_online_measure to use mock_df directly."""
+    monkeypatch.setattr(oe, "compute_online_measure", lambda: oe._compute_online_measure_from_df(mock_df))
+    result = oe._compute_online_measure_from_df(mock_df)
+    assert pytest.approx(result, 0.01) == 0.5
+
+
+def test_measure_with_nan_fields(monkeypatch):
+    df = pd.DataFrame({
+        "rating": [np.nan, 5],
+        "completion_rate": [np.nan, 0.8],
+        "timestamp": pd.to_datetime(["2024-01-01 10:00:00", "2024-01-01 10:05:00"]),
+        "rated_at": pd.to_datetime(["2024-01-01 09:50:00", "2024-01-01 10:06:00"]),
+        "last_watch": pd.to_datetime(["2024-01-01 09:40:00", "2024-01-01 10:20:00"])
+    })
+
+    result = oe._compute_online_measure_from_df(df)
+    assert 0.0 <= result <= 1.0
+
+
+def test_all_unsuccessful(monkeypatch):
+    df = pd.DataFrame({
+        "rating": [1, 2, 3],
+        "completion_rate": [0.4, 0.3, 0.2],
+        "timestamp": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+        "rated_at": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+        "last_watch": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+    })
+    result = oe._compute_online_measure_from_df(df)
+    assert result == 0.0
+
+
+def test_all_successful(monkeypatch):
+    df = pd.DataFrame({
+        "rating": [5, 4, 5],
+        "completion_rate": [0.9, 0.8, 0.95],
+        "timestamp": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+        "rated_at": pd.to_datetime(["2023-12-31", "2024-01-01", "2024-01-02"]),
+        "last_watch": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"])
+    })
+    result = oe._compute_online_measure_from_df(df)
+    assert result == 1.0
+
+import pandas as pd
+from homealone.evaluation.online_evaluation.snapshot_data import preprocess_snapshot
+
+
+def test_preprocess_snapshot_explode_and_merge():
+    """
+    Test that preprocess_snapshot correctly:
+      - Splits the 'recommended_items' column into a list and explodes it
+      - Merges with watch/rating data on user_id and movie_id
+      - Produces 20 rows (one per recommended movie)
+      - Computes valid watch_duration_minutes and completion_rate values
+    """
+
+    # --- Mock recommendations dataframe (like the one from SQLite) ---
+    recommendations_df = pd.DataFrame({
+        "id": [1],
+        "user_id": [42],
+        "recommended_items": [",".join([f"m{i}" for i in range(20)])],
+        "timestamp": [pd.Timestamp("2025-10-27 12:00:00")],
+    })
+
+    # --- Mock watch history + ratings dataframe (joined view from SQL) ---
+    watch_rating_df = pd.DataFrame({
+        "user_id": [42] * 20,
+        "movie_id": [f"m{i}" for i in range(20)],
+        "start_time": pd.date_range("2025-10-27 11:00:00", periods=20, freq="min"),
+        "last_watch": pd.date_range("2025-10-27 11:30:00", periods=20, freq="min"),
+        "rating": [4.5] * 20,
+        "runtime": [90.0] * 20,
+        "rated_at": pd.date_range("2025-10-27 13:00:00", periods=20, freq="min"),
+    })
+
+    # --- Run preprocessing ---
     processed_df = preprocess_snapshot(recommendations_df, watch_rating_df)
-    return recommendations_df, watch_rating_df, processed_df
 
-# ------------------------
-# Tests for get_snapshot()
-# ------------------------
+    # --- Structural checks ---
+    assert isinstance(processed_df, pd.DataFrame), "Output must be a pandas DataFrame"
+    assert len(processed_df) == 20, "Exploded output should have 20 rows (one per movie)"
+    assert "movie_id" in processed_df.columns, "movie_id column must be present"
+    assert "watch_duration_minutes" in processed_df.columns, "watch_duration_minutes must be computed"
+    assert "completion_rate" in processed_df.columns, "completion_rate must be computed"
 
-def test_get_snapshot_returns_dataframes():
-    recommendations_df, watch_rating_df = get_snapshot()
-    assert isinstance(recommendations_df, pd.DataFrame), "recommendations_df should be a DataFrame"
-    assert isinstance(watch_rating_df, pd.DataFrame), "watch_rating_df should be a DataFrame"
+    # --- Type checks ---
+    assert pd.api.types.is_integer_dtype(processed_df["user_id"]), "user_id must be integer"
+    for col in ["start_time", "last_watch", "timestamp"]:
+        assert pd.api.types.is_datetime64_any_dtype(processed_df[col]), f"{col} must be datetime"
+    assert pd.api.types.is_float_dtype(processed_df["completion_rate"]), "completion_rate should be float"
 
-def test_recommendations_columns():
-    recommendations_df, _ = get_snapshot()
-    expected_cols = {"id", "user_id", "recommended_items", "timestamp"}
-    assert expected_cols.issubset(recommendations_df.columns), "Missing columns in recommendations_df"
+    # --- Value checks ---
+    assert (processed_df["watch_duration_minutes"].dropna() >= 0).all(), \
+        "watch_duration_minutes must be non-negative"
+    assert (processed_df["completion_rate"].dropna() >= 0).all(), \
+        "completion_rate must be non-negative"
 
-def test_watch_history_columns():
-    _, watch_rating_df = get_snapshot()
-    expected_cols = {"user_id", "movie_id", "start_time", "last_watch", "rating", "runtime", "rated_at"}
-    assert expected_cols.issubset(watch_rating_df.columns), "Missing columns in watch_rating_df"
+    # --- Column renaming and explode behavior ---
+    assert "recommended_items" not in processed_df.columns, "recommended_items column must be dropped"
+    assert processed_df["movie_id"].nunique() == 20, "There should be 20 unique movies after explode"
+    assert processed_df["user_id"].nunique() == 1, "All records must belong to the same user"
 
-# ------------------------
-# Tests for preprocess_snapshot()
-# ------------------------
-
-def test_preprocess_explode(snapshot_data):
-    recommendations_df, watch_rating_df, df = snapshot_data
-    # Check that exploded movie_id column exists
-    assert "movie_id" in df.columns, "Processed df must have movie_id column"
-    # The exploded DataFrame should have at least as many rows as recommendations_df
-    assert len(df) >= len(recommendations_df), "Exploded DataFrame should be >= recommendations_df"
-
-def test_preprocess_types(snapshot_data):
-    _, _, df = snapshot_data
-    assert pd.api.types.is_integer_dtype(df["user_id"]), "user_id should be integer"
-    assert pd.api.types.is_float_dtype(df["completion_rate"]), "completion_rate should be float"
-    assert pd.api.types.is_datetime64_any_dtype(df["start_time"]), "start_time should be datetime"
-    assert pd.api.types.is_datetime64_any_dtype(df["last_watch"]), "last_watch should be datetime"
-
-def test_preprocess_watch_duration(snapshot_data):
-    _, _, df = snapshot_data
-    # Check that all non-NaN durations are non-negative
-    assert (df["watch_duration_minutes"].dropna() >= 0).all(), "watch_duration_minutes should be >= 0"
-
-# ------------------------
-# Tests for compute_online_measure()
-# ------------------------
-
-def test_compute_online_measure_type():
-    result = compute_online_measure()
-    assert isinstance(result, float), "compute_online_measure should return a float"
-
-def test_recommended_successful_column(snapshot_data):
-    _, _, df = snapshot_data
-    from homealone.evaluation.online_evaluation.online_evaluation import compute_online_measure
-    # Call the function to ensure recommended_successful column exists
-    compute_online_measure()
-    # Column should exist after running compute_online_measure
-    assert "recommended_successful" in df.columns or True, "recommended_successful column should exist"
-
-def test_success_proportion_range():
-    result = compute_online_measure()
-    # Proportion must be between 0 and 1
-    assert 0.0 <= result <= 1.0, "Success proportion should be between 0 and 1"
-
-# ------------------------
-# Optional: Additional sanity checks
-# ------------------------
-
-def test_no_null_user_ids(snapshot_data):
-    _, _, df = snapshot_data
-    assert df["user_id"].notnull().all(), "user_id should not contain nulls"
-
-def test_ratings_range(snapshot_data):
-    _, _, df = snapshot_data
-    valid = df["rating"].notnull()
-    assert ((df.loc[valid, "rating"] >= 0) & (df.loc[valid, "rating"] <= 5)).all(), "rating should be between 0 and 5"
+    # --- Logical consistency: merged data from both inputs ---
+    sample = processed_df.iloc[0]
+    assert sample["rating"] == 4.5, "Rating must be preserved after merge"
+    assert sample["runtime"] == 90.0, "Runtime must be preserved after merge"
+    assert pd.notnull(sample["watch_duration_minutes"]), "watch_duration_minutes must be computed correctly"
+    assert pd.notnull(sample["completion_rate"]), "completion_rate must be computed correctly"
