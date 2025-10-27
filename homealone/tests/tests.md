@@ -333,14 +333,126 @@ Tests feature transformations in the training pipeline using the Surprise librar
 
 ---
 
+## Inference Module Tests
+
+### 7. `test_server.py` — [homealone/tests/test_inference/test_server.py](homealone/tests/test_inference/test_server.py)
+Tests the inference server module including model loading, recommendation generation, and Flask API endpoints.
+
+**Total: 34 tests**
+
+#### **Fallback Pool Preparation Tests** (5 tests)
+- Prepares fallback pool with default parameters
+- Filters by high rating threshold (>= 4.0)
+- Filters by minimum number of ratings
+- Handles empty results with impossible criteria
+- Validates avg_rating calculation and rounding (2 decimals)
+
+#### **Random Fallback Sampling Tests** (6 tests)
+- Returns comma-separated string of movie IDs
+- Sorts results by average rating (descending)
+- Handles requests exceeding pool size
+- Returns empty string for empty pool
+- Handles n=0 requests
+- Validates output format (comma-separated, no spaces)
+
+#### **Top-N Prediction Sorting Tests** (6 tests)
+- Extracts top-N predictions
+- Sorts by estimated rating (descending)
+- Handles requests for all predictions
+- Returns empty string for empty predictions
+- Handles n=0 requests
+- Validates comma-separated output format
+- Verifies in-place list sorting
+
+#### **Flask API Endpoints Tests** (6 tests)
+- Root endpoint returns success message
+- Validates user_id format (must be integer)
+- Accepts numeric string user_id
+- Returns fallback recommendations for unknown users
+- Handles users who rated all items
+- Generates successful recommendations for known users
+
+#### **Database Connection Management Tests** (3 tests)
+- Creates database connection
+- Returns same connection within request context
+- Enables WAL mode for concurrency
+
+#### **Resource Loading Tests** (2 tests)
+- Raises FileNotFoundError for missing model files
+- Successfully loads all models (SVD, KNN, NMF) and trainset
+
+#### **Edge Cases and Error Handling Tests** (5 tests)
+- Handles empty fallback pool
+- Validates trainset ID mapping consistency (round-trip conversion)
+- Tests trainset.all_items() method
+- Handles fallback pool with single movie
+- Validates complete recommendation flow with multiple predictions
+
+#### **Integration Tests** (1 test)
+- Complete API request to response flow (20 recommendations)
+
+---
+
+### 8. `test_telemetry.py` — [homealone/tests/test_inference/test_telemetry.py](homealone/tests/test_inference/test_telemetry.py)
+Tests the Telemetry class for logging recommendation events to the database.
+
+**Total: 30 tests**
+
+#### **Initialization Tests** (4 tests)
+- Creates recommendations table on init
+- Validates table schema (id, user_id, recommended_items, timestamp)
+- Validates table constraints (PRIMARY KEY, UNIQUE, NOT NULL)
+- Ensures table created only once (idempotent)
+
+#### **Event Type Validation Tests** (4 tests)
+- Accepts valid event type ('recommendation')
+- Rejects invalid event types
+- Rejects empty string event type
+- Rejects None event type
+
+#### **Recommendation Logging Tests** (9 tests)
+- Inserts recommendation log successfully
+- Uses default timestamp when not provided
+- Handles multiple users
+- Accepts numeric user_id (converts to string)
+- Updates existing user (UPSERT on CONFLICT)
+- Preserves record ID during UPSERT
+- Handles multiple updates for same user
+- Handles empty user_id
+- Handles empty recommended_items string
+
+#### **Data Validation Tests** (6 tests)
+- Handles long recommended_items list (large comma-separated string)
+- Handles special characters in movie IDs
+- Handles special characters in user_id
+- Accepts various timestamp formats (ISO 8601, custom)
+- Uses default timestamp when None provided
+- Validates required fields presence
+
+#### **Error Handling Tests** (2 tests)
+- Handles None values for required fields
+- Raises exception with closed database connection
+
+#### **Transaction Management Tests** (1 test)
+- Commits transactions after logging
+
+#### **Integration Tests** (4 tests)
+- Multiple Telemetry instances with same database
+- Typical usage pattern (init, log, verify)
+- Fallback recommendation logging workflow
+- Repeated user requests (UPSERT behavior)
+
+---
+
 ## Test Summary
 
 ### Total Test Count by Module:
 - **Schema Validation**: 70 tests (38 schemas + 32 validator)
 - **Data Processing**: 95 tests (28 kafka + 30 process + 37 db_writer)
 - **Training**: 21 tests (21 feature_transformation)
+- **Inference**: 64 tests (34 server + 30 telemetry)
 
-### **Grand Total: 186 tests**
+### **Grand Total: 250 tests**
 
 ### Key Testing Patterns Used:
 1. **Parametrized tests** - Testing multiple values efficiently
