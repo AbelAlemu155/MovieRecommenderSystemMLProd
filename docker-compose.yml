@@ -53,7 +53,7 @@ services:
       dockerfile: Dockerfile
     command: python /app/data_processing/db_writer.py
     volumes:
-      - db_data:/app/db
+      - ./homealone/db:/app/db
       - data_queues:/app/data_queues
     restart: on-failure
     depends_on:
