@@ -53,7 +53,7 @@ def preprocess_snapshot(recommendations_df, watch_rating_df):
     
     recommendations_df['movie_id'] = recommendations_df['movie_ids'].str.split(',')
     recommendations_df = recommendations_df.explode('movie_id').drop(columns='movie_ids').reset_index(drop=True)
-    #  the size of the new dataframe will be 20 times 
+    #  [the size of the new dataframe will be 20 times, this is an important test condition ]
     #  merge the data 
     df = recommendations_df.merge(watch_rating_df, on=['user_id', 'movie_id'], how='left')
     df["watch_duration_minutes"] = (df["last_watch"] - df["start_time"]).dt.total_seconds() / 60
