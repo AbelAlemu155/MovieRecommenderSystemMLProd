@@ -99,8 +99,7 @@ if __name__ == "__main__":
     
     while True:
         # add logging here
-        logging.info("Starting training cycle...")
-        print("Starting training cycle...")            
+        logging.info("Starting training cycle...")           
         model_svd = trainer.train_svd()
         model_knn = trainer.train_knn()
         model_nmf = trainer.train_nmf()
@@ -114,8 +113,11 @@ if __name__ == "__main__":
         trainer.save_model(model_knn, knn_file_path)
         trainer.save_model(model_nmf, nmf_file_path)
         trainer.save_trainset()
-        print("All models and trainset saved.")
+        logging.info("All models and trainset saved.")
         # wait for some time before retraining
-        time.sleep(60*60*12)  # Train every 12 hours
+        wait_time = 60*60*3  # total seconds = seconds * minutes * hours
+        logging.info(f"Waiting for {wait_time} seconds before next training cycle...")
+        time.sleep(wait_time)  # Train every 60 seconds
+        logging.info("Reloading data for next training cycle...")
         trainer.load_data()
         
