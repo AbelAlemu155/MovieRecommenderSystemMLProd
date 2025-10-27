@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, abort, g
 import pickle
 import random
-from .telemetry import Telemetry
+from telemetry import Telemetry
 import time
 
 # We load these ONCE at startup
@@ -156,11 +156,13 @@ def recommend(user_id):
     print(f"Received recommendation request for user_id: {user_id}")
     conn = sqlite3.connect('db/home_alone.db', timeout=30)
     telemetry = Telemetry(conn)
+    print
     try:
         # 1. Convert user_id from URL to the correct type.
         # Check if user_id is purely numeric first
         if user_id.isdigit():
             raw_user_id = int(user_id)
+            
         else:
             return jsonify({"error": "user_id must be an integer."}), 400
     except ValueError:
@@ -209,6 +211,7 @@ def recommend(user_id):
         'recommended_items': recommendation_response,
         'timestamp': None
     })
+    # changes added
     return jsonify(recommendation_response)
 
 

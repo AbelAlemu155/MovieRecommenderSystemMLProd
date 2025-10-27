@@ -35,6 +35,9 @@ def get_snapshot():
 
 
 def preprocess_snapshot(recommendations_df, watch_rating_df):
+    if 'recommended_items' in df.columns:
+        recommendations_df.rename(columns={'recommended_items': 'movie_ids'}, inplace=True)
+    
     recommendations_df['movie_id'] = recommendations_df['movie_ids'].str.split(',')
     recommendations_df = recommendations_df.explode('movie_id').drop(columns='movie_ids').reset_index(drop=True)
     #  the size of the new dataframe will be 20 times 

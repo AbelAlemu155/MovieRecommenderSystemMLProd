@@ -38,3 +38,5 @@ class Telemetry:
             recommended_items=excluded.recommended_items, timestamp=excluded.timestamp
         """, (user_id, recommended_items, timestamp))
         self.db_connection.commit()
+
+    

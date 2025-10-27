@@ -8,9 +8,9 @@ from tqdm import tqdm
 
 # import schema validation manager and schemas
 import logging
-from homealone.data_processing.schema_validation.validator import ValidationManager
-from homealone.data_processing.schema_validation.schemas import WatchHistoryRecord, RatingRecord
-
+from schema_validation.validator import ValidationManager
+from schema_validation.schemas import WatchHistoryRecord, RatingRecord
+import requests
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -253,6 +253,32 @@ class DBWriter:
         return self.validator.get_stats()
 
 
+    def request_recommendations(self):
+        #  request recommendations for existing users
+        
+        
+
+    
+        cursor= self.conn.cursor()
+        cursor.execute("SELECT user_id FROM ratings")
+        # 3. Fetch all results
+        user_ids = [row[0] for row in cursor.fetchall()]
+        for uid in user_ids:
+            url = f"http://localhost:8082/recommend/{uid}"
+            try:
+                response = requests.get(url)
+                if response.status_code == 200:
+                    print( f"User {uid}: Success -> {response.json()}")
+                else:
+                    print(f"User {uid}: Failed with status {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                 print(f"User {uid}: Error -> {e}")
+
+        
+
+
+
+
 if __name__ == "__main__":
     logger.info("=== Starting DBWriter with Schema Validation ===")
     while True:
@@ -262,9 +288,11 @@ if __name__ == "__main__":
             writer.process_files()
             stats = writer.get_validation_stats()
             logger.info(f"Validation statistics: {stats}")
+            logger.info(writer.request_recommendations())
             writer.close()
             logger.debug(
                 "DB Writer cycle completed. Sleeping for 5 seconds...")
+            
             time.sleep(5)
         except KeyboardInterrupt:
             logger.info("DBWriter interrupted by user")
