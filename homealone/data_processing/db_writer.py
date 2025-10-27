@@ -252,6 +252,13 @@ class DBWriter:
         return self.validator.get_stats()
 
 
+   
+
+        
+
+
+
+
 if __name__ == "__main__":
     logger.info("=== Starting DBWriter with Schema Validation ===")
     while True:
@@ -261,9 +268,11 @@ if __name__ == "__main__":
             writer.process_files()
             stats = writer.get_validation_stats()
             logger.info(f"Validation statistics: {stats}")
+
             writer.close()
             logger.debug(
                 "DB Writer cycle completed. Sleeping for 5 seconds...")
+            
             time.sleep(5)
         except KeyboardInterrupt:
             logger.info("DBWriter interrupted by user")

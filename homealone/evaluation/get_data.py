@@ -2,7 +2,22 @@ from data_processing.db_writer import DBWriter
 import pandas as pd, math
 
 # query is the sql query to fetch the data for tha model
-def get_data(query): 
+def get_data(): 
+
+    query = """
+                SELECT 
+                    WH.user_id,
+                    WH.movie_id,
+                    WH.total_watch_time,
+                    WH.last_watch,
+                    (julianday(WH.last_watch) - julianday(WH.start_time)) * 24*60 AS gap_watch,
+                    R.rating, 
+                    m.runtime
+                FROM watch_history AS WH
+                JOIN movies as m ON m.movie_id = WH.movie_id
+                LEFT JOIN ratings AS R
+                ON WH.user_id = R.user_id AND WH.movie_id = R.movie_id;
+                    """
     #  split the data 80% to 20% rule using time into train and test data
     writer= DBWriter()
     df= pd.read_sql_query(query, writer.conn, parse_dates=["last_watch"])
@@ -20,6 +35,38 @@ def get_data(query):
     test_df  = df_sorted.iloc[val_idx:].copy()
 
     return train_df, val_df,  test_df
+
+
+def get_random_users(count=500):
+    writer = DBWriter()
+    query = """
+    SELECT  user_id
+    FROM watch_history
+    ORDER BY RANDOM()
+    LIMIT  ?;
+    """
+    cursor= writer.conn.cursor()
+    # fetch count user ids randomly for the requests
+    cursor.execute(query, (count,))
+    rows = cursor.fetchall()
+    writer.conn.close()
+    return [row[0] for row in rows]
+
+
+def get__counts():
+    writer = DBWriter()
+    cursor = writer.conn.cursor()
+
+    cursor.execute("""
+       SELECT COUNT(Distinct user_id), COUNT(Distinct movie_id), COUNT(*)
+        FROM watch_history;
+    """)
+    counts = cursor.fetchone() 
+    writer.conn.close()
+    return counts
+
+        
+
 
 
 

@@ -173,11 +173,13 @@ def recommend(user_id):
     print(f"Received recommendation request for user_id: {user_id}")
     conn = get_db()
     telemetry = Telemetry(conn)
+    print
     try:
         # 1. Convert user_id from URL to the correct type.
         # Check if user_id is purely numeric first
         if user_id.isdigit():
             raw_user_id = int(user_id)
+            
         else:
             return jsonify({"error": "user_id must be an integer."}), 400
     except ValueError:
@@ -226,6 +228,7 @@ def recommend(user_id):
         'recommended_items': recommendation_response,
         'timestamp': None
     })
+    # changes added
     return jsonify(recommendation_response)
 
 
