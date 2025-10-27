@@ -8,17 +8,6 @@ services:
       - ./homealone/db:/app/db
     restart: on-failure
 
-  # db:
-  #   build:
-  #     context: homealone/db
-  #     dockerfile: Dockerfile
-  #   volumes:
-  #     - ./homealone/models:/app/models
-  #     - ./homealone/db:/app/db
-  #   ports:
-  #     - "5001:5000"
-  #   restart: on-failure
-
   inference:
     build:
       context: homealone/inference
@@ -60,9 +49,16 @@ services:
       kafka_processor:
         condition: service_started
 
-#Define a shared volume for the model file
-volumes:
-  model_storage:
-    driver: local
-  data_queues:
-    driver: local
+  drift_monitor:
+    build:
+      context: homealone/monitoring
+      dockerfile: Dockerfile
+    command: python /app/monitoring/data_drift_monitor.py
+    environment:
+      - TEST_MODE=false
+    volumes:
+      - ./homealone/db:/app/db
+      - ./homealone/reports:/app/reports
+    restart: on-failure
+    depends_on:
+      - db_writer
