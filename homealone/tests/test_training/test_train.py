@@ -1,390 +1,479 @@
 """
-Tests for feature transformation functions in the training pipeline.
+Tests for the Training class - fully mocked with proper patching.
 
-These tests cover:
-1. Data loading and basic transformations (user_id, movie_id, rating)
-2. Surprise Reader transformations (rating scale normalization)
-3. Dataset creation and trainset/testset building
-4. ID mapping between raw IDs and internal trainset IDs
+Run with: pytest homealone/tests/test_training/test_train.py -v
 """
 
 import pytest
-import pandas as pd
-import sqlite3
-import tempfile
-import os
-from surprise import Dataset, Reader
+from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from datetime import datetime, timedelta
+import sys
+
+# Mock surprise before any imports
+sys.modules['surprise'] = MagicMock()
+sys.modules['surprise.prediction_algorithms'] = MagicMock()
 
 
 # ============================================================================
-# Fixtures
+# Test: Initialization
 # ============================================================================
 
-@pytest.fixture
-def sample_ratings_data():
-    """Sample ratings data for testing transformations"""
-    return pd.DataFrame([
-        {'user_id': 'user1', 'movie_id': 'movie1', 'rating': 5},
-        {'user_id': 'user1', 'movie_id': 'movie2', 'rating': 4},
-        {'user_id': 'user2', 'movie_id': 'movie1', 'rating': 3},
-        {'user_id': 'user2', 'movie_id': 'movie3', 'rating': 2},
-        {'user_id': 'user3', 'movie_id': 'movie2', 'rating': 5},
-        {'user_id': 'user3', 'movie_id': 'movie3', 'rating': 1},
-    ])
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_initialization_creates_connection(mock_sql, mock_connect):
+    """Test that Training class initializes and connects to database"""
+    from homealone.training.train import Training
+    
+    mock_conn = MagicMock()
+    mock_connect.return_value = mock_conn
+    
+    trainer = Training()
+    
+    assert trainer.db_path == 'db/home_alone.db'
+    assert trainer.test_percentage == 0.30
+    assert trainer.retrain_threshold == 0.05
+    mock_connect.assert_called_once_with('db/home_alone.db')
 
 
-@pytest.fixture
-def sample_ratings_with_edge_cases():
-    """Sample ratings with edge cases (boundary values, duplicates)"""
-    return pd.DataFrame([
-        {'user_id': 'user1', 'movie_id': 'movie1', 'rating': 1},  # Min rating
-        {'user_id': 'user1', 'movie_id': 'movie2', 'rating': 5},  # Max rating
-        {'user_id': 'user2', 'movie_id': 'movie1', 'rating': 3},  # Duplicate user-movie
-        {'user_id': 'user2', 'movie_id': 'movie1', 'rating': 4},  # Duplicate (should keep last)
-        {'user_id': 'user3', 'movie_id': 'movie3', 'rating': 2.5}, # Float rating
-    ])
-
-
-@pytest.fixture
-def temp_db_with_ratings(sample_ratings_data):
-    """Create a temporary SQLite database with ratings table"""
-    # Create temporary database
-    fd, db_path = tempfile.mkstemp(suffix='.db')
-    os.close(fd)
-
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # Create ratings table
-    cursor.execute('''
-        CREATE TABLE ratings (
-            user_id TEXT NOT NULL,
-            movie_id TEXT NOT NULL,
-            rating REAL NOT NULL,
-            rated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    # Insert sample data
-    for _, row in sample_ratings_data.iterrows():
-        cursor.execute(
-            'INSERT INTO ratings (user_id, movie_id, rating) VALUES (?, ?, ?)',
-            (row['user_id'], row['movie_id'], row['rating'])
-        )
-
-    conn.commit()
-    conn.close()
-
-    yield db_path
-
-    # Cleanup
-    if os.path.exists(db_path):
-        os.remove(db_path)
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_initialization_sets_correct_attributes(mock_sql, mock_connect):
+    """Test that all attributes are set correctly"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    
+    trainer = Training()
+    
+    assert trainer.table_name == 'ratings'
+    assert trainer.trainset is None
+    assert trainer.training_cutoff is None
+    assert trainer.model_path == '/app/models/'
 
 
 # ============================================================================
-# Test: Data Loading from SQLite
+# Test: Retraining Logic
 # ============================================================================
 
-def test_load_ratings_from_db(temp_db_with_ratings):
-    """Test loading ratings data from SQLite database"""
-    conn = sqlite3.connect(temp_db_with_ratings)
-
-    # Load data (same as train.py line 34)
-    query = "SELECT user_id, movie_id, rating FROM ratings"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-
-    # Assertions
-    assert len(df) == 6, "Should load 6 ratings"
-    assert list(df.columns) == ['user_id', 'movie_id', 'rating'], "Should have correct columns"
-    assert df['rating'].min() >= 1, "Ratings should be >= 1"
-    assert df['rating'].max() <= 5, "Ratings should be <= 5"
-    assert df['user_id'].notna().all(), "No null user_ids"
-    assert df['movie_id'].notna().all(), "No null movie_ids"
-
-
-def test_dataframe_structure(sample_ratings_data):
-    """Test that DataFrame has correct structure for Surprise"""
-    df = sample_ratings_data[['user_id', 'movie_id', 'rating']]
-
-    assert len(df.columns) == 3, "Should have exactly 3 columns"
-    assert 'user_id' in df.columns, "Should have user_id column"
-    assert 'movie_id' in df.columns, "Should have movie_id column"
-    assert 'rating' in df.columns, "Should have rating column"
-
-
-# ============================================================================
-# Test: Surprise Reader Transformation
-# ============================================================================
-
-def test_reader_rating_scale():
-    """Test that Reader correctly defines rating scale (1-5)"""
-    # This is the transformation in train.py line 40
-    reader = Reader(rating_scale=(1, 5))
-
-    assert reader.rating_scale == (1, 5), "Rating scale should be (1, 5)"
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_should_retrain_first_run(mock_sql, mock_connect):
+    """Test should_retrain returns True on first run"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    def side_effect_func(query, conn):
+        if 'training_metadata' in query:
+            # First call: empty metadata (no previous training)
+            return pd.DataFrame(columns=['total_samples'])
+        elif 'COUNT' in query:
+            # Second call: current count
+            return pd.DataFrame({'count': [1000]})
+        return pd.DataFrame()
+    
+    mock_sql.side_effect = side_effect_func
+    
+    trainer = Training()
+    should_train, current, new = trainer.should_retrain()
+    
+    assert should_train is True
+    assert current == 1000
+    assert new == 0
 
 
-def test_dataset_creation_from_dataframe(sample_ratings_data):
-    """Test creating Surprise Dataset from DataFrame"""
-    # This mirrors train.py lines 40-41
-    reader = Reader(rating_scale=(1, 5))
-    df = sample_ratings_data[['user_id', 'movie_id', 'rating']]
-    data = Dataset.load_from_df(df, reader)
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_should_retrain_sufficient_data(mock_sql, mock_connect):
+    """Test should_retrain returns True with 5% more data"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    def side_effect_func(query, conn):
+        if 'training_metadata' in query:
+            # First call: last training had 1000 samples
+            return pd.DataFrame({'total_samples': [1000]})
+        elif 'COUNT' in query:
+            # Second call: current count is 1060 (6% more)
+            return pd.DataFrame({'count': [1060]})
+        return pd.DataFrame()
+    
+    mock_sql.side_effect = side_effect_func
+    
+    trainer = Training()
+    should_train, current, new = trainer.should_retrain()
+    
+    assert should_train is True
+    assert current == 1060
+    assert new == 60
 
-    assert data is not None, "Dataset should be created"
-    # Dataset should store the raw data
-    assert hasattr(data, 'raw_ratings'), "Dataset should have raw_ratings attribute"
-
-
-def test_dataset_with_edge_case_ratings(sample_ratings_with_edge_cases):
-    """Test dataset creation with boundary and edge case ratings"""
-    reader = Reader(rating_scale=(1, 5))
-    df = sample_ratings_with_edge_cases[['user_id', 'movie_id', 'rating']]
-    data = Dataset.load_from_df(df, reader)
-
-    # Should handle min/max ratings
-    assert data is not None
-
-    # Build trainset to verify transformations
-    trainset = data.build_full_trainset()
-    assert trainset.n_users > 0
-    assert trainset.n_items > 0
-
-
-# ============================================================================
-# Test: Trainset Building
-# ============================================================================
-
-def test_build_full_trainset(sample_ratings_data):
-    """Test building full trainset from dataset"""
-    # This is train.py line 44
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    assert trainset is not None, "Trainset should be created"
-    assert trainset.n_users == 3, "Should have 3 unique users"
-    assert trainset.n_items == 3, "Should have 3 unique items"
-    assert trainset.n_ratings == 6, "Should have 6 ratings"
-
-
-def test_trainset_rating_scale_transformation(sample_ratings_data):
-    """Test that trainset maintains rating scale information"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # Trainset should store rating scale
-    assert trainset.rating_scale == (1, 5), "Trainset should maintain rating scale"
-
-
-def test_build_anti_testset(sample_ratings_data):
-    """Test building anti-testset (unrated items) for evaluation"""
-    # This is train.py line 46
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-    testset = trainset.build_anti_testset()
-
-    assert testset is not None, "Testset should be created"
-    assert len(testset) > 0, "Anti-testset should contain unrated items"
-
-    # Anti-testset should contain items NOT in trainset
-    # With 3 users and 3 items, we have 9 possible pairs, 6 rated, so 3 unrated
-    assert len(testset) == 3, "Should have 3 unrated user-item pairs"
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_should_retrain_insufficient_data(mock_sql, mock_connect):
+    """Test should_retrain returns False with insufficient data"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    def side_effect_func(query, conn):
+        if 'training_metadata' in query:
+            # First call: last training had 1000 samples
+            return pd.DataFrame({'total_samples': [1000]})
+        elif 'COUNT' in query:
+            # Second call: current count is 1030 (3% more - insufficient)
+            return pd.DataFrame({'count': [1030]})
+        return pd.DataFrame()
+    
+    mock_sql.side_effect = side_effect_func
+    
+    trainer = Training()
+    should_train, current, new = trainer.should_retrain()
+    
+    assert should_train is False
+    assert current == 1030
+    assert new == 30
 
 
 # ============================================================================
-# Test: ID Mapping Transformations
+# Test: Data Loading
 # ============================================================================
 
-def test_raw_to_inner_id_mapping(sample_ratings_data):
-    """Test transformation from raw IDs to internal trainset IDs"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # Test user ID mapping
-    raw_user_id = 'user1'
-    inner_user_id = trainset.to_inner_uid(raw_user_id)
-    assert isinstance(inner_user_id, int), "Inner user ID should be integer"
-    assert 0 <= inner_user_id < trainset.n_users, "Inner ID should be in valid range"
-
-    # Test movie ID mapping
-    raw_movie_id = 'movie1'
-    inner_movie_id = trainset.to_inner_iid(raw_movie_id)
-    assert isinstance(inner_movie_id, int), "Inner item ID should be integer"
-    assert 0 <= inner_movie_id < trainset.n_items, "Inner ID should be in valid range"
-
-
-def test_inner_to_raw_id_mapping(sample_ratings_data):
-    """Test reverse transformation from internal IDs to raw IDs"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # Test round-trip user ID conversion
-    raw_user_id = 'user2'
-    inner_id = trainset.to_inner_uid(raw_user_id)
-    converted_back = trainset.to_raw_uid(inner_id)
-    assert converted_back == raw_user_id, "Should convert back to original raw ID"
-
-    # Test round-trip item ID conversion
-    raw_movie_id = 'movie2'
-    inner_id = trainset.to_inner_iid(raw_movie_id)
-    converted_back = trainset.to_raw_iid(inner_id)
-    assert converted_back == raw_movie_id, "Should convert back to original raw ID"
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.pd.to_datetime')
+def test_get_percentage_based_split_empty_data(mock_datetime, mock_sql, mock_connect):
+    """Test that empty data returns None"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    # Return empty DataFrame
+    mock_sql.return_value = pd.DataFrame()
+    
+    trainer = Training()
+    train_df, test_df, cutoff = trainer.get_percentage_based_split()
+    
+    assert train_df is None
+    assert test_df is None
+    assert cutoff is None
 
 
-def test_all_raw_ids_have_inner_mapping(sample_ratings_data):
-    """Test that all raw IDs in dataset have corresponding inner IDs"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # All unique users should be mappable
-    unique_users = sample_ratings_data['user_id'].unique()
-    for user_id in unique_users:
-        try:
-            inner_id = trainset.to_inner_uid(user_id)
-            assert inner_id >= 0
-        except ValueError:
-            pytest.fail(f"User ID {user_id} should have inner mapping")
-
-    # All unique movies should be mappable
-    unique_movies = sample_ratings_data['movie_id'].unique()
-    for movie_id in unique_movies:
-        try:
-            inner_id = trainset.to_inner_iid(movie_id)
-            assert inner_id >= 0
-        except ValueError:
-            pytest.fail(f"Movie ID {movie_id} should have inner mapping")
-
-
-def test_unknown_id_raises_error(sample_ratings_data):
-    """Test that unknown IDs raise ValueError"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # Unknown user should raise ValueError
-    with pytest.raises(ValueError):
-        trainset.to_inner_uid('unknown_user')
-
-    # Unknown movie should raise ValueError
-    with pytest.raises(ValueError):
-        trainset.to_inner_iid('unknown_movie')
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.pd.to_datetime')
+def test_get_percentage_based_split_insufficient_data(mock_datetime, mock_sql, mock_connect):
+    """Test that insufficient data (< 100) returns None"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    # Return small DataFrame (50 rows)
+    df = pd.DataFrame({
+        'user_id': list(range(50)),
+        'movie_id': list(range(50)),
+        'rating': [3.0] * 50,
+        'rated_at': [datetime.now()] * 50
+    })
+    
+    mock_sql.return_value = df
+    mock_datetime.return_value = df['rated_at']
+    
+    trainer = Training()
+    train_df, test_df, cutoff = trainer.get_percentage_based_split()
+    
+    assert train_df is None
+    assert test_df is None
+    assert cutoff is None
 
 
 # ============================================================================
-# Test: User-Item Matrix Structure
+# Test: Model Training
 # ============================================================================
 
-def test_trainset_user_item_structure(sample_ratings_data):
-    """Test that trainset creates correct user-item rating structure"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # Check user-item ratings structure
-    for user_inner_id in range(trainset.n_users):
-        user_ratings = trainset.ur[user_inner_id]
-        assert isinstance(user_ratings, list), "User ratings should be list"
-
-        for item_inner_id, rating in user_ratings:
-            assert isinstance(item_inner_id, int), "Item ID should be integer"
-            assert isinstance(rating, (int, float)), "Rating should be numeric"
-            assert 1 <= rating <= 5, "Rating should be in scale (1-5)"
-
-
-def test_global_mean_rating_computation(sample_ratings_data):
-    """Test global mean rating computation"""
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(sample_ratings_data[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # Trainset should compute global mean
-    global_mean = trainset.global_mean
-    expected_mean = sample_ratings_data['rating'].mean()
-
-    assert abs(global_mean - expected_mean) < 0.01, "Global mean should match DataFrame mean"
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.SVD')
+def test_train_svd_calls_surprise_svd(mock_svd, mock_sql, mock_connect):
+    """Test that SVD training calls Surprise SVD correctly"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    mock_model = MagicMock()
+    mock_svd.return_value = mock_model
+    
+    trainer = Training()
+    trainer.trainset = MagicMock()
+    
+    result = trainer.train_svd()
+    
+    mock_svd.assert_called_once_with(
+        n_factors=20,
+        lr_all=0.01,
+        reg_all=0.01,
+        n_epochs=20,
+        random_state=42
+    )
+    mock_model.fit.assert_called_once_with(trainer.trainset)
+    assert result == mock_model
 
 
-# ============================================================================
-# Test: Data Validation
-# ============================================================================
-
-def test_reject_invalid_rating_scale():
-    """Test that ratings outside scale are handled properly"""
-    df = pd.DataFrame([
-        {'user_id': 'user1', 'movie_id': 'movie1', 'rating': 6},  # Invalid: > 5
-        {'user_id': 'user2', 'movie_id': 'movie2', 'rating': 0},  # Invalid: < 1
-    ])
-
-    reader = Reader(rating_scale=(1, 5))
-
-    # Surprise will clip or handle out-of-range ratings
-    # This test ensures the data can still be loaded
-    data = Dataset.load_from_df(df[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    # The dataset should still be created (Surprise handles this internally)
-    assert trainset.n_ratings == 2
-
-
-def test_empty_dataframe_handling():
-    """Test handling of empty DataFrame"""
-    df = pd.DataFrame(columns=['user_id', 'movie_id', 'rating'])
-    reader = Reader(rating_scale=(1, 5))
-
-    data = Dataset.load_from_df(df, reader)
-    trainset = data.build_full_trainset()
-
-    assert trainset.n_users == 0, "Empty data should have 0 users"
-    assert trainset.n_items == 0, "Empty data should have 0 items"
-    assert trainset.n_ratings == 0, "Empty data should have 0 ratings"
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.KNNBasic')
+def test_train_knn_calls_surprise_knn(mock_knn, mock_sql, mock_connect):
+    """Test that KNN training calls Surprise KNNBasic correctly"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    mock_model = MagicMock()
+    mock_knn.return_value = mock_model
+    
+    trainer = Training()
+    trainer.trainset = MagicMock()
+    
+    result = trainer.train_knn()
+    
+    mock_knn.assert_called_once_with(sim_options={'user_based': True})
+    mock_model.fit.assert_called_once_with(trainer.trainset)
+    assert result == mock_model
 
 
-def test_single_rating_handling():
-    """Test handling of dataset with single rating"""
-    df = pd.DataFrame([
-        {'user_id': 'user1', 'movie_id': 'movie1', 'rating': 4}
-    ])
-
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(df[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
-
-    assert trainset.n_users == 1
-    assert trainset.n_items == 1
-    assert trainset.n_ratings == 1
-    assert trainset.global_mean == 4.0
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.NMF')
+def test_train_nmf_calls_surprise_nmf(mock_nmf, mock_sql, mock_connect):
+    """Test that NMF training calls Surprise NMF correctly"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    mock_model = MagicMock()
+    mock_nmf.return_value = mock_model
+    
+    trainer = Training()
+    trainer.trainset = MagicMock()
+    
+    result = trainer.train_nmf()
+    
+    mock_nmf.assert_called_once_with(n_factors=20, n_epochs=20, random_state=42)
+    mock_model.fit.assert_called_once_with(trainer.trainset)
+    assert result == mock_model
 
 
 # ============================================================================
-# Test: Integration with Training Class
+# Test: Model Saving
 # ============================================================================
 
-def test_training_class_load_data_transformation(temp_db_with_ratings):
-    """Test the complete load_data transformation from Training class"""
-    # Mock the Training class load_data method
-    conn = sqlite3.connect(temp_db_with_ratings)
-    query = "SELECT user_id, movie_id, rating FROM ratings"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.dump.dump')
+def test_save_model_calls_dump(mock_dump, mock_sql, mock_connect):
+    """Test that model saving calls surprise dump"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    
+    trainer = Training()
+    mock_model = MagicMock()
+    
+    trainer.save_model(mock_model, '/tmp/test.dump')
+    
+    mock_dump.assert_called_once_with('/tmp/test.dump', algo=mock_model)
 
-    # Apply transformations (train.py lines 40-44)
-    reader = Reader(rating_scale=(1, 5))
-    data = Dataset.load_from_df(df[['user_id', 'movie_id', 'rating']], reader)
-    trainset = data.build_full_trainset()
 
-    # Verify complete transformation pipeline
-    assert trainset is not None
-    assert trainset.n_ratings == len(df)
-    assert trainset.rating_scale == (1, 5)
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('pickle.dump')
+@patch('builtins.open', create=True)
+def test_save_trainset_uses_pickle(mock_open_file, mock_pickle, mock_sql, mock_connect):
+    """Test that trainset is saved using pickle"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    mock_file = MagicMock()
+    mock_open_file.return_value.__enter__.return_value = mock_file
+    
+    trainer = Training()
+    trainer.trainset = {'mock': 'trainset'}
+    
+    trainer.save_trainset()
+    
+    mock_pickle.assert_called_once()
+    assert mock_pickle.call_args[0][0] == trainer.trainset
 
-    # Verify all original users and items are preserved
-    assert trainset.n_users == df['user_id'].nunique()
-    assert trainset.n_items == df['movie_id'].nunique()
+
+# ============================================================================
+# Test: Model Evaluation
+# ============================================================================
+
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('homealone.training.train.accuracy.rmse')
+def test_evaluate_model_sufficient_data(mock_rmse, mock_sql, mock_connect):
+    """Test model evaluation with sufficient data"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    # Create real DataFrame for iterrows
+    test_df = pd.DataFrame({
+        'user_id': list(range(50)),
+        'movie_id': list(range(100, 150)),
+        'rating': [4.0] * 50
+    })
+    
+    mock_model = MagicMock()
+    mock_predictions = [MagicMock() for _ in range(50)]
+    mock_model.test.return_value = mock_predictions
+    mock_rmse.return_value = 0.85
+    
+    trainer = Training()
+    rmse = trainer.evaluate_model(mock_model, test_df, 'TestModel')
+    
+    assert rmse == 0.85
+    mock_model.test.assert_called_once()
+
+
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_evaluate_model_insufficient_data(mock_sql, mock_connect):
+    """Test that evaluation returns None with insufficient data"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_connect.return_value = MagicMock()
+    
+    # Create DataFrame with only 5 rows
+    test_df = pd.DataFrame({
+        'user_id': list(range(5)),
+        'movie_id': list(range(5)),
+        'rating': [4.0] * 5
+    })
+    
+    trainer = Training()
+    rmse = trainer.evaluate_model(MagicMock(), test_df, 'TestModel')
+    
+    assert rmse is None
+
+
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_evaluate_model_none_dataframe(mock_sql, mock_connect):
+    """Test that evaluation handles None DataFrame"""
+    from homealone.training.train import Training
+    
+    mock_connect.return_value = MagicMock()
+    
+    trainer = Training()
+    rmse = trainer.evaluate_model(MagicMock(), None, 'TestModel')
+    
+    assert rmse is None
+
+
+# ============================================================================
+# Test: Metadata Logging
+# ============================================================================
+
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_log_training_metadata_success(mock_sql, mock_connect):
+    """Test successful metadata logging"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+    
+    # Mock read_sql_query to return empty (for initialization)
+    mock_sql.return_value = pd.DataFrame()
+    
+    trainer = Training()
+    trainer.training_cutoff = datetime(2025, 10, 27)
+    
+    # Create real DataFrames
+    train_df = pd.DataFrame({
+        'user_id': [1, 2],
+        'movie_id': [101, 102],
+        'rating': [4.0, 3.0],
+        'rated_at': [datetime(2025, 10, 25), datetime(2025, 10, 26)]
+    })
+    
+    test_df = pd.DataFrame({
+        'user_id': [1],
+        'movie_id': [103],
+        'rating': [5.0],
+        'rated_at': [datetime(2025, 10, 27)]
+    })
+    
+    evaluation_results = {
+        'svd_rmse': 0.85,
+        'knn_rmse': 0.92,
+        'nmf_rmse': 0.88
+    }
+    
+    trainer.log_training_metadata(train_df, test_df, evaluation_results)
+    
+    # Verify that execute was called with INSERT
+    # Check all execute calls for INSERT statements
+    insert_found = False
+    for call_args in mock_cursor.execute.call_args_list:
+        if call_args[0] and 'INSERT' in str(call_args[0][0]):
+            insert_found = True
+            break
+    
+    assert insert_found, "INSERT statement was not executed"
+    
+    # Verify commit was called
+    assert mock_conn.commit.called
+
+@patch('homealone.training.train.sqlite3.connect')
+@patch('homealone.training.train.pd.read_sql_query')
+def test_log_training_metadata_identifies_best_model(mock_sql, mock_connect):
+    """Test that best model is correctly identified"""
+    from homealone.training.train import Training
+    import pandas as pd
+    
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+    
+    trainer = Training()
+    trainer.training_cutoff = datetime(2025, 10, 27)
+    
+    train_df = pd.DataFrame({
+        'user_id': [1],
+        'movie_id': [101],
+        'rating': [4.0],
+        'rated_at': [datetime(2025, 10, 25)]
+    })
+    
+    # KNN has best (lowest) RMSE
+    evaluation_results = {
+        'svd_rmse': 0.95,
+        'knn_rmse': 0.82,  # Best
+        'nmf_rmse': 0.90
+    }
+    
+    trainer.log_training_metadata(train_df, None, evaluation_results)
+    
+    # Verify 'knn_rmse' was logged as best
+    execute_args = mock_cursor.execute.call_args[0][1]
+    best_model = execute_args[-1]  # Last parameter
+    assert best_model == 'knn_rmse'
+
+
+# ============================================================================
+# Run Tests
+# ============================================================================
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v', '--tb=short'])

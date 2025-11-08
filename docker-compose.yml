@@ -8,17 +8,6 @@ services:
       - ./homealone/db:/app/db
     restart: on-failure
 
-  db:
-    build:
-      context: homealone/db
-      dockerfile: Dockerfile
-    volumes:
-      - ./homealone/models:/app/models
-      - ./homealone/db:/app/db
-    ports:
-      - "5001:5000"
-    restart: on-failure
-
   inference:
     build:
       context: homealone/inference
@@ -27,7 +16,7 @@ services:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
     ports: 
-      - "8080:8080"
+      - "8082:8082"
     depends_on:
       - training
     restart: on-failure
@@ -43,8 +32,8 @@ services:
       - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
       - TUNNEL_PORT=${TUNNEL_PORT}
     volumes:
-      - db_data:/app/db
-      - data_queues:/app/data_queues
+      - ./homealone/db:/app/db
+      - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
 
   db_writer:
@@ -53,18 +42,23 @@ services:
       dockerfile: Dockerfile
     command: python /app/data_processing/db_writer.py
     volumes:
-      - db_data:/app/db
-      - data_queues:/app/data_queues
+      - ./homealone/db:/app/db
+      - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
     depends_on:
       kafka_processor:
         condition: service_started
 
-#Define a shared volume for the model file
-volumes:
-  model_storage:
-    driver: local
-  db_data:
-    driver: local
-  data_queues:
-    driver: local
+  drift_monitor:
+    build:
+      context: homealone/monitoring
+      dockerfile: Dockerfile
+    command: python /app/monitoring/data_drift_monitor.py
+    environment:
+      - TEST_MODE=false
+    volumes:
+      - ./homealone/db:/app/db
+      - ./homealone/reports:/app/reports
+    restart: on-failure
+    depends_on:
+      - db_writer

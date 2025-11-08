@@ -1,8 +1,3 @@
-"""
-Shared pytest fixtures for all tests.
-Place this file at tests/conftest.py
-"""
-
 import pytest
 from unittest.mock import MagicMock, Mock
 
@@ -275,3 +270,50 @@ def sample_rating_csv_df():
             'time': '2023-10-25 10:31:20'
         }
     ])
+
+
+# ============================================================================
+# Inference Testing Fixtures
+# ============================================================================
+
+@pytest.fixture
+def temp_inference_db():
+    """Create a temporary database for inference testing"""
+    import tempfile
+    import os
+    fd, db_path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)
+
+    yield db_path
+
+    # Cleanup
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+
+@pytest.fixture
+def sample_surprise_trainset():
+    """Create a sample Surprise trainset for inference testing"""
+    import pandas as pd
+    from surprise import Dataset, Reader
+
+    data_dict = {
+        'user_id': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        'movie_id': [101, 102, 101, 103, 102, 103, 101, 104, 103, 105],
+        'rating': [5, 4, 3, 2, 5, 1, 4, 3, 5, 4]
+    }
+    df = pd.DataFrame(data_dict)
+
+    reader = Reader(rating_scale=(1, 5))
+    data = Dataset.load_from_df(df[['user_id', 'movie_id', 'rating']], reader)
+    trainset = data.build_full_trainset()
+    return trainset
+
+
+@pytest.fixture
+def mock_flask_app():
+    """Mock Flask app for testing"""
+    from unittest.mock import MagicMock
+    app = MagicMock()
+    app.config = {'TESTING': True}
+    return app

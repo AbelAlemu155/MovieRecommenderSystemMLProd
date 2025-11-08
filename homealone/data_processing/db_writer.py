@@ -116,7 +116,7 @@ class DBWriter:
                 row['start_time'],
                 row['last_watch']
             ))
-            self.conn.commit()
+        self.conn.commit()
 
     def update_ratings(self, data):
         cursor = self.conn.cursor()
@@ -134,7 +134,7 @@ class DBWriter:
                 row['rating'],
                 row['rated_at']
             ))
-            self.conn.commit()
+        self.conn.commit()
 
     def process_files(self):
         """
@@ -237,7 +237,6 @@ class DBWriter:
             except Exception as e:
                 logger.error(
                     f"Error processing file {file}: {e}", exc_info=True)
-
         logger.info("All files processed.")
 
     def close(self):
@@ -253,6 +252,13 @@ class DBWriter:
         return self.validator.get_stats()
 
 
+   
+
+        
+
+
+
+
 if __name__ == "__main__":
     logger.info("=== Starting DBWriter with Schema Validation ===")
     while True:
@@ -262,9 +268,11 @@ if __name__ == "__main__":
             writer.process_files()
             stats = writer.get_validation_stats()
             logger.info(f"Validation statistics: {stats}")
+
             writer.close()
             logger.debug(
                 "DB Writer cycle completed. Sleeping for 5 seconds...")
+            
             time.sleep(5)
         except KeyboardInterrupt:
             logger.info("DBWriter interrupted by user")
