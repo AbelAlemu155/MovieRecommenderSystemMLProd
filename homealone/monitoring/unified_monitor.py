@@ -18,6 +18,7 @@ from email.mime.multipart import MIMEMultipart
 from service_health import ServiceHealthMonitor
 from model_quality_monitor import ModelQualityMonitor
 from data_drift_monitor import DataDriftMonitor
+from prometheus_exporter import PrometheusExporter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -170,6 +171,14 @@ class UnifiedMonitor:
         self.drift_monitor = DataDriftMonitor(db_path, reports_dir)
 
         self.alert_manager = AlertManager(alert_config or {})
+
+        # Initialize Prometheus exporter
+        self.prometheus_exporter = PrometheusExporter(db_path=db_path, port=8000)
+
+        # Start Prometheus exporter in background thread
+        self.exporter_thread = Thread(target=self.prometheus_exporter.start, args=(30,), daemon=True)
+        self.exporter_thread.start()
+        logger.info("Prometheus exporter started on port 8000")
 
         logger.info("All monitoring components initialized")
 
