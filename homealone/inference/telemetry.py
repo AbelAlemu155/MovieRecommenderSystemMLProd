@@ -13,11 +13,13 @@ class Telemetry:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS recommendations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL UNIQUE,
+                user_id TEXT NOT NULL,
                 recommended_items TEXT NOT NULL,
+                model_version TEXT,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Remove UNIQUE constraint from user_id to allow multiple entries
         self.db_connection.commit()
         
     def log(self, event_type, details):
@@ -25,14 +27,16 @@ class Telemetry:
             raise ValueError("Invalid event type for telemetry logging.")
 
         if event_type == 'recommendation':
-            user_id, recommended_items, timestamp = details['user_id'], details['recommended_items'], details['timestamp']
-            self._recommendation_log(user_id, recommended_items, timestamp)
+            user_id = details['user_id']
+            recommended_items = details['recommended_items']
+            timestamp = details.get('timestamp')
+            model_version = details.get('model_version')
+            self._recommendation_log(user_id, recommended_items, timestamp, model_version)
 
-    def _recommendation_log(self, user_id, recommended_items, timestamp):
+    def _recommendation_log(self, user_id, recommended_items, timestamp, model_version=None):
         cursor = self.db_connection.cursor()
         cursor.execute("""
-            INSERT INTO recommendations (user_id, recommended_items, timestamp)
-            VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
-            recommended_items=excluded.recommended_items, timestamp=excluded.timestamp
-        """, (user_id, recommended_items, timestamp))
+            INSERT INTO recommendations (user_id, recommended_items, timestamp, model_version)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, recommended_items, timestamp, model_version))
         self.db_connection.commit()

@@ -49,16 +49,22 @@ services:
       kafka_processor:
         condition: service_started
 
-  drift_monitor:
+  monitoring:
     build:
       context: homealone/monitoring
       dockerfile: Dockerfile
-    command: python /app/monitoring/data_drift_monitor.py
     environment:
       - TEST_MODE=false
+      - TUNNEL_USER=${TUNNEL_USER}
+      - TUNNEL_IP=${TUNNEL_IP}
+      - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
+      - TUNNEL_PORT=${TUNNEL_PORT}
     volumes:
       - ./homealone/db:/app/db
       - ./homealone/reports:/app/reports
+    ports:
+      - "8000:8000"
     restart: on-failure
     depends_on:
       - db_writer
+      - inference
