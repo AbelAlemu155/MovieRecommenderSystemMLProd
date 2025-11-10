@@ -15,8 +15,8 @@ services:
     volumes:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
-    ports: 
-      - "8082:8082"
+    ports:
+      - "8082:8080"
     depends_on:
       - training
     restart: on-failure
@@ -68,3 +68,21 @@ services:
     depends_on:
       - db_writer
       - inference
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./homealone/grafana/provisioning:/etc/grafana/provisioning
+    restart: on-failure
+    depends_on:
+      - monitoring
+
+volumes:
+  grafana-data:
