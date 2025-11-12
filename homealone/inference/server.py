@@ -13,7 +13,7 @@ import time
 
 # We load these ONCE at startup
 model_svd = None
-model_knn = None
+# model_knn = None
 model_nmf = None
 trainset = None
 fallback_pool = []
@@ -23,7 +23,7 @@ MODEL_DIR = "/app/models"
 DATABASE = '/app/db/home_alone.db'
 TRAINSET_PATH = os.path.join(MODEL_DIR, "trainset.dump")
 SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
-KNN_MODEL_PATH = os.path.join(MODEL_DIR, "knn_model.dump")
+# KNN_MODEL_PATH = os.path.join(MODEL_DIR, "knn_model.dump")
 NMF_MODEL_PATH = os.path.join(MODEL_DIR, "nmf_model.dump")
 
 
@@ -32,7 +32,8 @@ def load_resources():
     Load all models and the pre-built trainset from disk.
     This function is called once when the Flask app starts.
     """
-    global model_svd, model_knn, model_nmf, trainset, fallback_pool
+    # global model_svd, model_knn, model_nmf, trainset, fallback_pool
+    global model_svd, model_nmf, trainset, fallback_pool
 
     try:
         # 1. Load the pre-built trainset
@@ -52,9 +53,9 @@ def load_resources():
         _, model_svd = dump.load(SVD_MODEL_PATH)
         print("SVD model loaded.")
         
-        print(f"Loading KNN model from {KNN_MODEL_PATH}...")
-        _, model_knn = dump.load(KNN_MODEL_PATH)
-        print("KNN model loaded.")
+        # print(f"Loading KNN model from {KNN_MODEL_PATH}...")
+        # _, model_knn = dump.load(KNN_MODEL_PATH)
+        # print("KNN model loaded.")
         
         print(f"Loading NMF model from {NMF_MODEL_PATH}...")
         _, model_nmf = dump.load(NMF_MODEL_PATH)
@@ -168,69 +169,79 @@ def hello():
 @app.route('/recommend/<user_id>', methods=['GET'])
 def recommend(user_id):
     """
-    Generate recommendations for a given user_id.
+    Generate recommendations with optimizations for speed.
     """
-    print(f"Received recommendation request for user_id: {user_id}")
+    start_time = time.time()
+    logging.info(f"Received recommendation request for user_id: {user_id}")
+    
+    if not user_id.isdigit():
+        return jsonify({"error": "user_id must be an integer."}), 400
+    
+    raw_user_id = int(user_id)
     conn = get_db()
     telemetry = Telemetry(conn)
-    print
-    try:
-        # 1. Convert user_id from URL to the correct type.
-        # Check if user_id is purely numeric first
-        if user_id.isdigit():
-            raw_user_id = int(user_id)
-            
-        else:
-            return jsonify({"error": "user_id must be an integer."}), 400
-    except ValueError:
-        return jsonify({"error": "Invalid user_id format."}), 400
-
+    
     try:
         inner_uid = trainset.to_inner_uid(raw_user_id)
-        logging.info(f"User {raw_user_id} mapped to inner ID {inner_uid}.")
     except ValueError:
-        logging.warning(f"User {raw_user_id} not found in trainset. Using fallback recommendations.")
-        recommendation_response =  get_random_fallback(fallback_pool, n=20)
+        logging.warning(f"User {raw_user_id} not in trainset. Using fallback.")
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         })
         return jsonify(recommendation_response)
-
-    # 3. Find all items the user has NOT rated (efficiently)
+    
+    # Get unrated items
     rated_items_inner = {iid for (iid, r) in trainset.ur[inner_uid]}
     all_items_inner = set(trainset.all_items())
     unrated_items_inner = all_items_inner - rated_items_inner
     
-    # 4. Format this set as a "testset" for the predict() function
+    MAX_PREDICTIONS = 200
+    if len(unrated_items_inner) > MAX_PREDICTIONS:
+        popular_items = {item['movie_id'] for item in fallback_pool[:500]}
+        popular_unrated = unrated_items_inner & {trainset.to_inner_iid(iid) for iid in popular_items if trainset.knows_item(iid)}
+        
+        if len(popular_unrated) >= MAX_PREDICTIONS:
+            unrated_items_inner = random.sample(list(popular_unrated), MAX_PREDICTIONS)
+        else:
+            remaining = MAX_PREDICTIONS - len(popular_unrated)
+            random_items = random.sample(list(unrated_items_inner - popular_unrated), remaining)
+            unrated_items_inner = list(popular_unrated) + random_items
+    
+    # Create testset
     testset_for_user = [
         (raw_user_id, trainset.to_raw_iid(iid), 4.0) 
         for iid in unrated_items_inner
     ]
-
+    
     if not testset_for_user:
-        recommendation_response =  get_random_fallback(fallback_pool, n=20)
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
-            'timestamp': None
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         })
-        return jsonify(recommendation_response), 200
-
+        return jsonify(recommendation_response)
+    
     svd_predictions = model_svd.test(testset_for_user)
-    # knn_predictions = model_knn.test(testset_for_user)
-    # nmf_predictions = model_nmf.test(testset_for_user)
-
+    
+    # Get top 20
     recommendation_response = get_top_n(svd_predictions, n=20)
+    
+    # Log telemetry
+    elapsed = time.time() - start_time
+    logging.info(f"Generated recommendations in {elapsed*1000:.0f}ms")
+    
     telemetry.log('recommendation', {
         'user_id': raw_user_id,
         'recommended_items': recommendation_response,
-        'timestamp': None
+        'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'response_time_ms': int(elapsed * 1000)
     })
-    # changes added
+    
     return jsonify(recommendation_response)
-
 
 
 if __name__ == '__main__':
@@ -240,4 +251,4 @@ if __name__ == '__main__':
     
     # Run the app
     logging.info("Server ready. Access at http://127.0.0.1:8082/recommend/<user_id>")
-    app.run(debug=True, port=8082, host='0.0.0.0')
+    app.run(debug=False, port=8082, host='0.0.0.0')
