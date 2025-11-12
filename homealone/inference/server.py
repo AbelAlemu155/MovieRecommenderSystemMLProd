@@ -125,7 +125,7 @@ def get_random_fallback(pool, n=20):
     # sort avg_rating descending
     random_fallback.sort(key=lambda x: x['avg_rating'], reverse=True)
     # return comma separated movie_ids
-    return ",".join([str(movie['movie_id']) for movie in random_fallback])
+    return ", ".join([str(movie['movie_id']) for movie in random_fallback])
 
 def get_top_n(predictions, n=20):
     """
@@ -139,7 +139,7 @@ def get_top_n(predictions, n=20):
     
     top_n_list = [pred.iid for pred in top_n_preds]
 
-    return ",".join([str(iid) for iid in top_n_list])
+    return ", ".join([str(iid) for iid in top_n_list])
 
 
 # --- Initialize the Flask App ---
@@ -191,6 +191,7 @@ def recommend(user_id):
             'recommended_items': recommendation_response,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         })
+        logging.warning(recommendation_response)
         return jsonify(recommendation_response)
     
     # Get unrated items
@@ -223,6 +224,7 @@ def recommend(user_id):
             'recommended_items': recommendation_response,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         })
+        logging.warning(recommendation_response)
         return jsonify(recommendation_response)
     
     svd_predictions = model_svd.test(testset_for_user)
@@ -240,6 +242,7 @@ def recommend(user_id):
         'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
         'response_time_ms': int(elapsed * 1000)
     })
+    logging.warning(recommendation_response)
     
     return jsonify(recommendation_response)
 
