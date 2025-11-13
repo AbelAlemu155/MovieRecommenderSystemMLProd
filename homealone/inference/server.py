@@ -48,7 +48,9 @@ MASTER_FALLBACK_MOVIES = [
     "first+name+carmen+1983"
 ]
 
-def get_random_fallback_simple(n=20):
+EXTRACTED_MOVIES = ["toy+story+1995" for _ in range(20)]
+
+def get_random_fallback_simple(user_id=56, n=20):
     """
     Get N random movies from master fallback list.
     This is faster than querying the database.
@@ -60,7 +62,10 @@ def get_random_fallback_simple(n=20):
     
     # Random sample from master list
     random.shuffle(MASTER_FALLBACK_MOVIES)
-    random_movies = random.sample(MASTER_FALLBACK_MOVIES, num_to_sample)
+    if user_id % 2 == 0:
+        random_movies = EXTRACTED_MOVIES[:num_to_sample]
+    else:
+        random_movies = random.sample(MASTER_FALLBACK_MOVIES, num_to_sample)
     
     return ",".join(random_movies)
 
@@ -217,7 +222,7 @@ def recommend(user_id):
     raw_user_id = int(user_id)
 
     # temporary fix for 400 thingy till we clear the db
-    recommendation_response = get_random_fallback_simple(n=20)
+    recommendation_response = get_random_fallback_simple(user_id=raw_user_id, n=20)
     logging.warning(recommendation_response)
     return jsonify(recommendation_response)
 
