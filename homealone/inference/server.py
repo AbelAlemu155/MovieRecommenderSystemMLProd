@@ -26,38 +26,29 @@ SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
 # KNN_MODEL_PATH = os.path.join(MODEL_DIR, "knn_model.dump")
 NMF_MODEL_PATH = os.path.join(MODEL_DIR, "nmf_model.dump")
 
-MASTER_FALLBACK_MOVIES = [
-    "big+hero+6+2014",
-    "avatar+2009",
-    "gone+girl+2014",
-    "pink+cadillac+1989",
-    "pulp+fiction+1994",
-    "lucky+numbers+2000",
-    "proof+of+life+2000",
-    'the+avengers+2012',
-    'the+dark+knight+2008',
-    'inception+2010',
-    'interstellar+2014',
-    "whiplash+2014",
-    "the+godfather+1972",
-    "the+godfather+part+ii+1974",
-    "the+shawshank+redemption+1994",
-    "guardians+of+the+galaxy+2014",
-    "coffy+1973",
-    "flight+of+the+phoenix+2004",
-    "star+wars+1977",
-    "schindlers+list+1993",
-    "rise+of+the+planet+of+the+apes+2011",
-    "dick+tracy+1990",
-    "apocalypto+2006",
-    "gladiator+2000",
-    "the+warriors+1979",
-    "proof+of+life+2000",
-    "action+jackson+1988",
-    "the+four+musketeers+1974",
-    "the+general+1926",
-    "air+america+1990",
+EXTRACTED_MOVIES = [
+    "being+john+malkovich+1999",
+    "love+the+beast+2009",
+    "rabbit+hole+2010",
+    "9+2005",
+    "a+special+day+1977",
+    "angel+heart+1987",
+    "big+star+nothing+can+hurt+me+2013",
+    "burnt+by+the+sun+1994",
+    "bye+bye+brasil+1980",
+    "chocolat+1988",
+    "citizen+ruth+1996",
+    "clueless+1995",
+    "cul-de-sac+1966",
+    "dark+passage+1947",
+    "dear+frankie+2004",
+    "dirty+dingus+magee+1970",
+    "drive_+he+said+1971",
+    "east+is+east+1999",
+    "farewell_+my+lovely+1975",
+    "first+name+carmen+1983"
 ]
+MASTER_FALLBACK_MOVIES = EXTRACTED_MOVIES
 
 
 def load_resources():
@@ -187,7 +178,7 @@ def get_random_fallback_simple(n=20):
     # Random sample from master list
     random_movies = random.sample(MASTER_FALLBACK_MOVIES, num_to_sample)
     
-    return ", ".join(random_movies)
+    return ",".join(random_movies)
 
 # --- Initialize the Flask App ---
 app = Flask(__name__)
