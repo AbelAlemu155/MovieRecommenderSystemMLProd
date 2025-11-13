@@ -27,26 +27,7 @@ SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
 NMF_MODEL_PATH = os.path.join(MODEL_DIR, "nmf_model.dump")
 
 EXTRACTED_MOVIES = [
-    "being+john+malkovich+1999",
-    "love+the+beast+2009",
-    "rabbit+hole+2010",
-    "9+2005",
-    "a+special+day+1977",
-    "angel+heart+1987",
-    "big+star+nothing+can+hurt+me+2013",
-    "burnt+by+the+sun+1994",
-    "bye+bye+brasil+1980",
-    "chocolat+1988",
-    "citizen+ruth+1996",
-    "clueless+1995",
-    "cul-de-sac+1966",
-    "dark+passage+1947",
-    "dear+frankie+2004",
-    "dirty+dingus+magee+1970",
-    "drive_+he+said+1971",
-    "east+is+east+1999",
-    "farewell_+my+lovely+1975",
-    "first+name+carmen+1983"
+"toy+story+1995" for _ in range(20),
 ]
 MASTER_FALLBACK_MOVIES = EXTRACTED_MOVIES
 
