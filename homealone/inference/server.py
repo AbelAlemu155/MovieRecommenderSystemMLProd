@@ -27,7 +27,7 @@ SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
 NMF_MODEL_PATH = os.path.join(MODEL_DIR, "nmf_model.dump")
 
 EXTRACTED_MOVIES = [
-"toy+story+1995" for _ in range(20),
+    "toy+story+1995" for _ in range(20)
 ]
 MASTER_FALLBACK_MOVIES = EXTRACTED_MOVIES
 
