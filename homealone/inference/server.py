@@ -26,6 +26,71 @@ SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
 # KNN_MODEL_PATH = os.path.join(MODEL_DIR, "knn_model.dump")
 NMF_MODEL_PATH = os.path.join(MODEL_DIR, "nmf_model.dump")
 
+# In your server.py, create a master fallback list
+MASTER_FALLBACK_MOVIES = [
+    # From log entries - popular movies across different users
+    "the+shawshank+redemption+1994",
+    "the+godfather+1972",
+    "the+dark+knight+2008",
+    "pulp+fiction+1994",
+    "forrest+gump+1994",
+    "fight+club+1999",
+    "star+wars+1977",
+    "avatar+2009",
+    "the+avengers+2012",
+    "guardians+of+the+galaxy+2014",
+    "whiplash+2014",
+    "gone+girl+2014",
+    "big+hero+6+2014",
+    "the+hunger+games+mockingjay+-+part+1+2014",
+    "the+maze+runner+2014",
+    "dawn+of+the+planet+of+the+apes+2014",
+    "rise+of+the+planet+of+the+apes+2011",
+    "blade+runner+1982",
+    "schindlers+list+1993",
+    "pirates+of+the+caribbean+the+curse+of+the+black+pearl+2003",
+    "the+wrong+trousers+1993",
+    "a+close+shave+1995",
+    "dragon+ball+z+broly+-+the+legendary+super+saiyan+1993",
+    "dragon+ball+z+broly+-+second+coming+1994",
+    "mulan+1998",
+    "alice+in+wonderland+1951",
+    "frankenstein+1931",
+    "airplane+1980",
+    "snow+white+and+the+seven+dwarfs+1937",
+    "beauty+and+the+beast+1991",
+    "cinderella+1950",
+    "cinderella+ii+dreams+come+true+2002",
+    "peter+pan+1953",
+    "brother+bear+2003",
+    "the+aristocats+1970",
+    "bambi+1942",
+    "gnomeo++juliet+2011",
+    "sleeping+beauty+1959",
+    "one+hundred+and+one+dalmatians+1961",
+    "chicken+little+2005",
+    "men+in+black+ii+2002",
+    "mickey_+donald_+goofy+the+three+musketeers+2004",
+    "ice+age+continental+drift+2012",
+    "ice+age+2002",
+    "the+little+mermaid+1989",
+    "beauty+and+the+beast+the+enchanted+christmas+1997",
+    "the+lion+king+2+simbas+pride+1998",
+    "the+lion+king+1+2004",
+    "girls+just+want+to+have+fun+1985",
+    "ace+ventura+pet+detective+1994",
+    "dumbo+1941",
+    "priest+2011",
+    "chicken+run+2000",
+    "the+sword+in+the+stone+1963",
+    "city+lights+1931",
+    "vivre+sa+vie+1962",
+    "the+lorax+2012",
+    "the+cat+returns+2002",
+    "tarzan+1999",
+    "ballet+shoes+2008",
+]
+
 
 def load_resources():
     """
@@ -141,6 +206,20 @@ def get_top_n(predictions, n=20):
 
     return ", ".join([str(iid) for iid in top_n_list])
 
+def get_random_fallback_simple(n=20):
+    """
+    Get N random movies from master fallback list.
+    This is faster than querying the database.
+    """
+    num_to_sample = min(n, len(MASTER_FALLBACK_MOVIES))
+    
+    if num_to_sample == 0:
+        return ""
+    
+    # Random sample from master list
+    random_movies = random.sample(MASTER_FALLBACK_MOVIES, num_to_sample)
+    
+    return ", ".join(random_movies)
 
 # --- Initialize the Flask App ---
 app = Flask(__name__)
@@ -178,6 +257,12 @@ def recommend(user_id):
         return jsonify({"error": "user_id must be an integer."}), 400
     
     raw_user_id = int(user_id)
+
+    # temporary fix for 400 thingy till we clear the db
+    recommendation_response = get_random_fallback_simple(n=20)
+    logging.warning(recommendation_response)
+    return jsonify(recommendation_response)
+    
     conn = get_db()
     telemetry = Telemetry(conn)
     
