@@ -62,7 +62,7 @@ def get_random_fallback_simple(n=20):
     random.shuffle(MASTER_FALLBACK_MOVIES)
     random_movies = random.sample(MASTER_FALLBACK_MOVIES, num_to_sample)
     
-    return ", ".join(random_movies)
+    return ",".join(random_movies)
 
 
 def load_resources():
