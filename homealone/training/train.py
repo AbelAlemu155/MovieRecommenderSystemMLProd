@@ -9,6 +9,12 @@ import time
 import logging
 from datetime import datetime, timedelta
 
+import sys
+sys.path.insert(0, '/app')
+from homealone.provenance.model_provenance import ModelProvenance
+from homealone.provenance.data_provenance import DataProvenance
+
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +32,10 @@ class Training:
         self.test_percentage = 0.30
         self.retrain_threshold = 0.05
         self.training_cutoff = None
+
+        # setup model provenance class
+        self.model_prov = ModelProvenance()
+        self.model_prov.initialize()
         
         self._connect()
         self._create_metadata_table()
@@ -312,6 +322,12 @@ class Training:
                 
                 self.conn.commit()
                 logger.info("Training metadata logged")
+
+                # log to mlflow
+                if hasattr(self, 'current_run_id') and self.current_run_id:
+                    self.model_prov.log_metrics({
+                        k:v for k,v in evaluation_results.items() if v is not None
+                    })
                 return
                 
             except sqlite3.OperationalError as e:
@@ -344,6 +360,12 @@ if __name__ == "__main__":
             continue
         
         logger.info("Starting training cycle...")
+
+        run_id = trainer.model_prov.start_run(
+            run_name=f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            tags={'trigger': 'auto', 'new_data_count': new_data}
+        )
+        trainer.current_run_id = run_id
         
         # Load data
         train_df, test_df = trainer.load_data_for_training()
@@ -384,8 +406,9 @@ if __name__ == "__main__":
         else:
             logger.warning("Insufficient test data for evaluation")
         
-        # Log metadata
+        # Log metadata and end run
         trainer.log_training_metadata(train_df, test_df, evaluation_results)
+        trainer.model_prov.end_run(status='FINISHED')
         
         logger.info("=" * 60)
         logger.info("Training cycle complete")
