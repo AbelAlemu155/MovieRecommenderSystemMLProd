@@ -26,11 +26,6 @@ SVD_MODEL_PATH = os.path.join(MODEL_DIR, "svd_model.dump")
 # KNN_MODEL_PATH = os.path.join(MODEL_DIR, "knn_model.dump")
 NMF_MODEL_PATH = os.path.join(MODEL_DIR, "nmf_model.dump")
 
-EXTRACTED_MOVIES = [
-    "toy+story+1995" for _ in range(20)
-]
-MASTER_FALLBACK_MOVIES = EXTRACTED_MOVIES
-
 
 def load_resources():
     """
@@ -146,21 +141,6 @@ def get_top_n(predictions, n=20):
 
     return ", ".join([str(iid) for iid in top_n_list])
 
-def get_random_fallback_simple(n=20):
-    """
-    Get N random movies from master fallback list.
-    This is faster than querying the database.
-    """
-    num_to_sample = min(n, len(MASTER_FALLBACK_MOVIES))
-    
-    if num_to_sample == 0:
-        return ""
-    
-    # Random sample from master list
-    random_movies = random.sample(MASTER_FALLBACK_MOVIES, num_to_sample)
-    
-    return ",".join(random_movies)
-
 # --- Initialize the Flask App ---
 app = Flask(__name__)
 
@@ -198,78 +178,73 @@ def recommend(user_id):
     
     raw_user_id = int(user_id)
 
-    # temporary fix for 400 thingy till we clear the db
-    recommendation_response = get_random_fallback_simple(n=20)
-    logging.warning(recommendation_response)
-    return recommendation_response
-
-    # conn = get_db()
-    # telemetry = Telemetry(conn)
+    conn = get_db()
+    telemetry = Telemetry(conn)
     
-    # try:
-    #     inner_uid = trainset.to_inner_uid(raw_user_id)
-    # except ValueError:
-    #     logging.warning(f"User {raw_user_id} not in trainset. Using fallback.")
-    #     recommendation_response = get_random_fallback(fallback_pool, n=20)
-    #     telemetry.log('recommendation', {
-    #         'user_id': raw_user_id,
-    #         'recommended_items': recommendation_response,
-    #         'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    #     })
-    #     logging.warning(recommendation_response)
-    #     return jsonify(recommendation_response)
+    try:
+        inner_uid = trainset.to_inner_uid(raw_user_id)
+    except ValueError:
+        logging.warning(f"User {raw_user_id} not in trainset. Using fallback.")
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        telemetry.log('recommendation', {
+            'user_id': raw_user_id,
+            'recommended_items': recommendation_response,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        })
+        logging.warning(recommendation_response)
+        return jsonify(recommendation_response)
     
-    # # Get unrated items
-    # rated_items_inner = {iid for (iid, r) in trainset.ur[inner_uid]}
-    # all_items_inner = set(trainset.all_items())
-    # unrated_items_inner = all_items_inner - rated_items_inner
+    # Get unrated items
+    rated_items_inner = {iid for (iid, r) in trainset.ur[inner_uid]}
+    all_items_inner = set(trainset.all_items())
+    unrated_items_inner = all_items_inner - rated_items_inner
     
-    # MAX_PREDICTIONS = 200
-    # if len(unrated_items_inner) > MAX_PREDICTIONS:
-    #     popular_items = {item['movie_id'] for item in fallback_pool[:500]}
-    #     popular_unrated = unrated_items_inner & {trainset.to_inner_iid(iid) for iid in popular_items if trainset.knows_item(iid)}
+    MAX_PREDICTIONS = 200
+    if len(unrated_items_inner) > MAX_PREDICTIONS:
+        popular_items = {item['movie_id'] for item in fallback_pool[:500]}
+        popular_unrated = unrated_items_inner & {trainset.to_inner_iid(iid) for iid in popular_items if trainset.knows_item(iid)}
         
-    #     if len(popular_unrated) >= MAX_PREDICTIONS:
-    #         unrated_items_inner = random.sample(list(popular_unrated), MAX_PREDICTIONS)
-    #     else:
-    #         remaining = MAX_PREDICTIONS - len(popular_unrated)
-    #         random_items = random.sample(list(unrated_items_inner - popular_unrated), remaining)
-    #         unrated_items_inner = list(popular_unrated) + random_items
+        if len(popular_unrated) >= MAX_PREDICTIONS:
+            unrated_items_inner = random.sample(list(popular_unrated), MAX_PREDICTIONS)
+        else:
+            remaining = MAX_PREDICTIONS - len(popular_unrated)
+            random_items = random.sample(list(unrated_items_inner - popular_unrated), remaining)
+            unrated_items_inner = list(popular_unrated) + random_items
     
-    # # Create testset
-    # testset_for_user = [
-    #     (raw_user_id, trainset.to_raw_iid(iid), 4.0) 
-    #     for iid in unrated_items_inner
-    # ]
+    # Create testset
+    testset_for_user = [
+        (raw_user_id, trainset.to_raw_iid(iid), 4.0) 
+        for iid in unrated_items_inner
+    ]
     
-    # if not testset_for_user:
-    #     recommendation_response = get_random_fallback(fallback_pool, n=20)
-    #     telemetry.log('recommendation', {
-    #         'user_id': raw_user_id,
-    #         'recommended_items': recommendation_response,
-    #         'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    #     })
-    #     logging.warning(recommendation_response)
-    #     return jsonify(recommendation_response)
+    if not testset_for_user:
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        telemetry.log('recommendation', {
+            'user_id': raw_user_id,
+            'recommended_items': recommendation_response,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        })
+        logging.warning(recommendation_response)
+        return jsonify(recommendation_response)
     
-    # svd_predictions = model_svd.test(testset_for_user)
+    svd_predictions = model_svd.test(testset_for_user)
     
-    # # Get top 20
-    # recommendation_response = get_top_n(svd_predictions, n=20)
+    # Get top 20
+    recommendation_response = get_top_n(svd_predictions, n=20)
     
-    # # Log telemetry
-    # elapsed = time.time() - start_time
-    # logging.info(f"Generated recommendations in {elapsed*1000:.0f}ms")
+    # Log telemetry
+    elapsed = time.time() - start_time
+    logging.info(f"Generated recommendations in {elapsed*1000:.0f}ms")
     
-    # telemetry.log('recommendation', {
-    #     'user_id': raw_user_id,
-    #     'recommended_items': recommendation_response,
-    #     'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-    #     'response_time_ms': int(elapsed * 1000)
-    # })
-    # logging.warning(recommendation_response)
+    telemetry.log('recommendation', {
+        'user_id': raw_user_id,
+        'recommended_items': recommendation_response,
+        'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'response_time_ms': int(elapsed * 1000)
+    })
+    logging.warning(recommendation_response)
     
-    # return jsonify(recommendation_response)
+    return jsonify(recommendation_response)
 
 
 if __name__ == '__main__':
