@@ -224,7 +224,7 @@ def recommend(user_id):
     # temporary fix for 400 thingy till we clear the db
     recommendation_response = get_random_fallback_simple(user_id=raw_user_id, n=20)
     logging.warning(recommendation_response)
-    return jsonify(recommendation_response)
+    return recommendation_response
 
     # conn = get_db()
     # telemetry = Telemetry(conn)
