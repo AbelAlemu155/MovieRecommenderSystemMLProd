@@ -263,7 +263,7 @@ def recommend(user_id):
     ]
     
     if not testset_for_user:
-        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        recommendation_response = get_random_fallback_simple(n=20)
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
