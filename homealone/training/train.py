@@ -33,9 +33,12 @@ class Training:
         self.retrain_threshold = 0.05
         self.training_cutoff = None
 
-        # setup model provenance class
+        # setup provenance tracking
         self.model_prov = ModelProvenance()
+        self.data_prov = DataProvenance()
+
         self.model_prov.initialize()
+        self.data_prov.initialize()
         
         self._connect()
         self._create_metadata_table()
@@ -125,6 +128,43 @@ class Training:
             logger.info(f"Need {int(last_count * self.retrain_threshold - new_data_count)} more ratings")
             return False, current_count, new_data_count
     
+    def export_data_to_parquet(self):
+        """Export current training data to Parquet for versioning"""
+        logger.info("Exporting training data to Parquet...")
+        
+        query = f"""
+            SELECT user_id, movie_id, rating, rated_at
+            FROM {self.table_name}
+            ORDER BY rated_at ASC
+        """
+        df = pd.read_sql_query(query, self.conn)
+        
+        # Create timestamped filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        data_dir = 'homealone/data/raw'
+        os.makedirs(data_dir, exist_ok=True)
+        
+        parquet_file = f'{data_dir}/ratings_{timestamp}.parquet'
+        
+        # Save as Parquet
+        df.to_parquet(
+            parquet_file,
+            engine='pyarrow',
+            compression='snappy',
+            index=False
+        )
+        
+        # Create symlink to latest
+        latest_link = f'{data_dir}/ratings_latest.parquet'
+        if os.path.exists(latest_link):
+            os.remove(latest_link)
+        os.symlink(os.path.basename(parquet_file), latest_link)
+        
+        logger.info(f"Data exported to: {parquet_file}")
+        logger.info(f"Size: {os.path.getsize(parquet_file) / 1024:.1f} KB")
+        
+        return parquet_file, timestamp
+
     def get_percentage_based_split(self):
         """
         Split data by percentage (temporal ordering).
@@ -343,12 +383,14 @@ if __name__ == "__main__":
     trainer = Training()
     
     while True:
+        # check training status
         logger.info("=" * 60)
         logger.info(f"Checking training status at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
         
         should_train, current_count, new_data = trainer.should_retrain()
         
+        # If not enough new data, wait and check again
         if not should_train:
             logger.info("Skipping training - insufficient new data")
             
@@ -361,11 +403,41 @@ if __name__ == "__main__":
         
         logger.info("Starting training cycle...")
 
+        # start experiment run
         run_id = trainer.model_prov.start_run(
             run_name=f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             tags={'trigger': 'auto', 'new_data_count': new_data}
         )
         trainer.current_run_id = run_id
+
+        # data versioning
+        try:
+            logger.info("=" * 60)
+            logger.info("DATA VERSIONING")
+            logger.info("=" * 60)
+            
+            # Export data to Parquet
+            parquet_file, timestamp = trainer.export_data_to_parquet()
+            
+            # Version with DVC
+            dvc_file = trainer.data_prov.version_data(parquet_file, push=True)
+            data_hash = trainer.data_prov.get_data_hash(parquet_file)
+            
+            logger.info(f"Data versioned: {data_hash}")
+            
+            # Log data version to MLflow
+            trainer.model_prov.log_data_version(data_hash or timestamp, {
+                'num_ratings': current_count,
+                'new_data': new_data,
+                'format': 'parquet',
+                'compression': 'snappy'
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to version data: {e}")
+            trainer.model_prov.end_run(status='FAILED')
+            time.sleep(3600)
+            continue
         
         # Load data
         train_df, test_df = trainer.load_data_for_training()
@@ -374,19 +446,81 @@ if __name__ == "__main__":
             logger.error("Failed to load training data. Retrying in 1 hour...")
             time.sleep(3600)
             continue
+
+        # log dataset splits to mlflow
+        trainer.model_prov.log_params({
+            'train_size': len(train_df),
+            'test_size': len(test_df) if test_df is not None else 0,
+            'test_percentage': trainer.test_percentage,
+            'training_cutoff': trainer.training_cutoff.isoformat() if trainer.training_cutoff else None
+        })
         
         # Train models
         model_svd = trainer.train_svd()
-        model_knn = trainer.train_knn()
+        # model_knn = trainer.train_knn()
         model_nmf = trainer.train_nmf()
+
+        # log training hyperparameters (need to make training functions return their hyperparameters as a dictionary)
+        trainer.model_prov.log_params({
+            'svd_n_factors': 20,
+            'svd_n_epochs': 20,
+            'svd_lr_all': 0.01,
+            'svd_reg_all': 0.01,
+            'knn_user_based': True,
+            'nmf_n_factors': 20,
+            'nmf_n_epochs': 20
+        })
         
         # Save models
         trainer.save_model(model_svd, '/app/models/svd_model.dump')
-        trainer.save_model(model_knn, '/app/models/knn_model.dump')
+        # trainer.save_model(model_knn, '/app/models/knn_model.dump')
         trainer.save_model(model_nmf, '/app/models/nmf_model.dump')
         trainer.save_trainset()
         
         logger.info("All models trained and deployed")
+
+        logger.info("=" * 60)
+        logger.info("MODEL VERSIONING")
+        logger.info("=" * 60)
+        
+        try:
+            # Log to MLflow (for experiment tracking)
+            trainer.model_prov.log_surprise_model(
+                model_svd, 
+                trainer.trainset, 
+                artifact_path="svd_model",
+                registered_model_name="movie-recommender-svd"
+            )
+            trainer.model_prov.log_surprise_model(
+                model_knn,
+                trainer.trainset,
+                artifact_path="knn_model"
+            )
+            trainer.model_prov.log_surprise_model(
+                model_nmf,
+                trainer.trainset,
+                artifact_path="nmf_model"
+            )
+            
+            # Also log the actual .dump files as artifacts
+            trainer.model_prov.log_artifact(svd_path)
+            # trainer.model_prov.log_artifact(knn_path)
+            trainer.model_prov.log_artifact(nmf_path)
+            trainer.model_prov.log_artifact(trainset_path)
+            
+            logger.info("✓ Models logged to MLflow")
+            
+            # Version with DVC (for deployment)
+            trainer.data_prov.version_data('models/svd_model.dump', push=True)
+            trainer.data_prov.version_data('models/knn_model.dump', push=True)
+            trainer.data_prov.version_data('models/nmf_model.dump', push=True)
+            trainer.data_prov.version_data('models/trainset.dump', push=True)
+            
+            logger.info("✓ Models versioned with DVC")
+            
+        except Exception as e:
+            logger.error(f"Failed to version models: {e}")
+
         
         
         evaluation_results = {}
@@ -396,7 +530,7 @@ if __name__ == "__main__":
             logger.info("=" * 60)
             
             evaluation_results['svd_rmse'] = trainer.evaluate_model(model_svd, test_df, 'SVD')
-            evaluation_results['knn_rmse'] = trainer.evaluate_model(model_knn, test_df, 'KNN')
+            # evaluation_results['knn_rmse'] = trainer.evaluate_model(model_knn, test_df, 'KNN')
             evaluation_results['nmf_rmse'] = trainer.evaluate_model(model_nmf, test_df, 'NMF')
             
             valid_results = {k: v for k, v in evaluation_results.items() if v is not None}
@@ -412,8 +546,11 @@ if __name__ == "__main__":
         
         logger.info("=" * 60)
         logger.info("Training cycle complete")
+        logger.info(f"MLflow run ID: {run_id}")
+        logger.info("View experiments at: http://localhost:5000")
         logger.info("Will check for retraining in 1 hour")
         logger.info("=" * 60)
         
         # Check every 1 hour
-        time.sleep(60 * 60 * 1)
+        # time.sleep(60 * 60 * 1)
+        time.sleep(120)
