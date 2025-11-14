@@ -7,6 +7,11 @@ services:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   inference:
     build:
@@ -20,6 +25,11 @@ services:
     depends_on:
       - training
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   kafka_processor:
     build:
@@ -35,6 +45,11 @@ services:
       - ./homealone/db:/app/db
       - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   db_writer:
     build:
@@ -48,6 +63,12 @@ services:
     depends_on:
       kafka_processor:
         condition: service_started
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
 
   drift_monitor:
     build:
@@ -62,3 +83,8 @@ services:
     restart: on-failure
     depends_on:
       - db_writer
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
