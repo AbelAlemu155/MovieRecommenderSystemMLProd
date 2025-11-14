@@ -45,10 +45,9 @@ MASTER_FALLBACK_MOVIES = [
     "drive_+he+said+1971",
     "east+is+east+1999",
     "farewell_+my+lovely+1975",
-    "first+name+carmen+1983"
+    "first+name+carmen+1983",
+    "toy+story+1995"
 ]
-
-EXTRACTED_MOVIES = ["toy+story+1995" for _ in range(20)]
 
 def get_random_fallback_simple(n=20):
     """
@@ -165,7 +164,7 @@ def get_random_fallback(pool, n=20):
     # sort avg_rating descending
     random_fallback.sort(key=lambda x: x['avg_rating'], reverse=True)
     # return comma separated movie_ids
-    return ", ".join([str(movie['movie_id']) for movie in random_fallback])
+    return ",".join([str(movie['movie_id']) for movie in random_fallback])
 
 def get_top_n(predictions, n=20):
     """
@@ -179,7 +178,7 @@ def get_top_n(predictions, n=20):
     
     top_n_list = [pred.iid for pred in top_n_preds]
 
-    return ", ".join([str(iid) for iid in top_n_list])
+    return ",".join([str(iid) for iid in top_n_list])
 
 # --- Initialize the Flask App ---
 app = Flask(__name__)
@@ -231,7 +230,7 @@ def recommend(user_id):
         inner_uid = trainset.to_inner_uid(raw_user_id)
     except ValueError:
         logging.warning(f"User {raw_user_id} not in trainset. Using fallback.")
-        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        recommendation_response = get_random_fallback_simple(n=20)
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
