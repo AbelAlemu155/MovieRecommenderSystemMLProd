@@ -11,6 +11,8 @@ import random
 from telemetry import Telemetry
 import time
 
+from experimentation.map_users_to_group import map_user_to_group
+from experimentation.constants import *
 # We load these ONCE at startup
 model_svd = None
 model_knn = None
@@ -217,12 +219,21 @@ def recommend(user_id):
             'timestamp': None
         })
         return jsonify(recommendation_response), 200
-
-    svd_predictions = model_svd.test(testset_for_user)
+    
+    # svd_predictions = model_svd.test(testset_for_user)
     # knn_predictions = model_knn.test(testset_for_user)
     # nmf_predictions = model_nmf.test(testset_for_user)
+    if(map_user_to_group(user_id=user_id)== CONTROL_GROUP):
+        predictions= model_svd.test(testset_for_user)
+        print("svd used")
+    else:
+        predictions= model_knn.test(testset_for_user)
+        print("knn used")
 
-    recommendation_response = get_top_n(svd_predictions, n=20)
+
+
+    
+    recommendation_response = get_top_n(predictions, n=20)
     telemetry.log('recommendation', {
         'user_id': raw_user_id,
         'recommended_items': recommendation_response,

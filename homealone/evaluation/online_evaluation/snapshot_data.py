@@ -2,7 +2,9 @@
 
 import pandas as pd, os
 import sqlite3
-def get_snapshot():
+
+from homealone.experimentation.map_users_to_group import define_hash, pyhash
+def get_snapshot(treatment_group=None):
     
 
     query = """
@@ -14,24 +16,74 @@ def get_snapshot():
     conn = sqlite3.connect(db_path)
     recommendations_df = pd.read_sql_query(query, conn,  parse_dates=['timestamp'] )
 
-    query = """
-        SELECT 
-            wh.user_id,
-            wh.movie_id,
-            wh.start_time,
-            wh.last_watch,
-            r.rating,
-            m.runtime,
-            r.rated_at
-        FROM watch_history AS wh
-        LEFT JOIN ratings AS r
-            ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
-        LEFT JOIN movies AS m
-            ON wh.movie_id = m.movie_id
-        WHERE wh.user_id IN (
-            SELECT user_id FROM recommendations
-        );
-        """
+    if(treatment_group is not None):
+        
+        query = """
+            SELECT 
+                wh.user_id,
+                wh.movie_id,
+                wh.start_time,
+                wh.last_watch,
+                r.rating,
+                m.runtime,
+                r.rated_at
+            FROM watch_history AS wh
+            LEFT JOIN ratings AS r
+                ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+            LEFT JOIN movies AS m
+                ON wh.movie_id = m.movie_id
+            WHERE wh.user_id IN (
+                SELECT user_id FROM recommendations 
+            );
+            """
+
+    elif(treatment_group):
+        conn.create_function("pyhash", 1, pyhash)
+        query = """
+            SELECT 
+                wh.user_id,
+                wh.movie_id,
+                wh.start_time,
+                wh.last_watch,
+                r.rating,
+                m.runtime,
+                r.rated_at
+            FROM watch_history AS wh
+            LEFT JOIN ratings AS r
+                ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+            LEFT JOIN movies AS m
+                ON wh.movie_id = m.movie_id
+            WHERE wh.user_id IN (
+                SELECT user_id FROM recommendations 
+                WHERE pyhash(wh.user_id) % 100 < 10
+            );
+            """
+    else:
+        conn.create_function("pyhash", 1, pyhash)
+        query = """
+            SELECT 
+                wh.user_id,
+                wh.movie_id,
+                wh.start_time,
+                wh.last_watch,
+                r.rating,
+                m.runtime,
+                r.rated_at
+            FROM watch_history AS wh
+            LEFT JOIN ratings AS r
+                ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+            LEFT JOIN movies AS m
+                ON wh.movie_id = m.movie_id
+            WHERE wh.user_id IN (
+                SELECT user_id FROM recommendations 
+                WHERE pyhash(wh.user_id) % 100 > 10
+            );
+            """
+
+
+        
+
+    
 
     # Load result into pandas DataFrame
     watch_rating_df = pd.read_sql_query(query, conn, 

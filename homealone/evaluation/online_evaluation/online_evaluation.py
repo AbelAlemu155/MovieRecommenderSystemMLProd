@@ -8,9 +8,10 @@
 
 from homealone.evaluation.online_evaluation.snapshot_data import *
 import pandas as pd
-def compute_online_measure():
+
+def compute_online_measure(treatment_group=None):
    
-    recommendations_df, watch_rating_df = get_snapshot()
+    recommendations_df, watch_rating_df = get_snapshot(treatment_group=treatment_group)
     df = preprocess_snapshot(recommendations_df=recommendations_df, 
                              watch_rating_df=watch_rating_df)
     df['recommended_successful'] = df.apply(
@@ -37,8 +38,6 @@ def compute_online_measure():
     print(df[df['recommended_successful']==True])
     return success_proportion
 
-
-import pandas as pd
 
 def _compute_online_measure_from_df(df: pd.DataFrame) -> float:
     """

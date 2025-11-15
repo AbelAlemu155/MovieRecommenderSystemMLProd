@@ -2,6 +2,8 @@ import pytest
 import pandas as pd
 import numpy as np
 from homealone.evaluation.online_evaluation import online_evaluation as oe
+import pandas as pd
+from homealone.evaluation.online_evaluation.snapshot_data import preprocess_snapshot
 
 @pytest.fixture
 def mock_df():
@@ -79,8 +81,7 @@ def test_all_successful(monkeypatch):
     result = oe._compute_online_measure_from_df(df)
     assert result == 1.0
 
-import pandas as pd
-from homealone.evaluation.online_evaluation.snapshot_data import preprocess_snapshot
+
 
 
 def test_preprocess_snapshot_explode_and_merge():
