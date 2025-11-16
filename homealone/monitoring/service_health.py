@@ -1,6 +1,6 @@
 """
 Service Health Monitor - Tracks availability and health of the recommendation service
-Monitors Kafka logs to determine actual service availability from user perspective
+Monitors recommendation data from the database populated by inference telemetry
 """
 import sqlite3
 import pandas as pd
@@ -10,7 +10,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
-from kafka_log_reader import KafkaLogReader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,7 +44,7 @@ class ServiceHealthMonitor:
         logger.info(f"Connected to database: {self.db_path}")
 
     def _create_tables(self):
-        """Create tables for health metrics"""
+        """Create tables for health metrics (recommendations table is created by telemetry)"""
         cursor = self.conn.cursor()
 
         # Service availability metrics
@@ -68,20 +67,6 @@ class ServiceHealthMonitor:
             )
         ''')
 
-        # Request log from Kafka (parsed recommendation requests)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS recommendation_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp DATETIME NOT NULL,
-                user_id INTEGER NOT NULL,
-                server TEXT,
-                status INTEGER NOT NULL,
-                recommendations TEXT,
-                response_time_ms REAL,
-                model_version TEXT
-            )
-        ''')
-
         # Alerts table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS health_alerts (
@@ -98,90 +83,18 @@ class ServiceHealthMonitor:
         ''')
 
         cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_requests_timestamp
-            ON recommendation_requests(timestamp)
-        ''')
-
-        cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_alerts_timestamp
             ON health_alerts(timestamp, resolved)
         ''')
 
         self.conn.commit()
-        logger.info("Service health monitoring tables initialized")
+        logger.info("Service health monitoring tables initialized (using existing recommendations table)")
 
-    def parse_kafka_recommendation_log(self, log_line: str) -> Optional[Dict]:
-        """
-        Parse Kafka log line for recommendation requests.
-        Format: <time>,<userid>,recommendation request <server>, status <status>, result: <recommendations>, <responsetime>ms
-        """
-        import re
-
-        pattern = r'^([^,]+),([^,]+),recommendation request ([^,]+), status (\d+), result: (.+), (\d+)\s*ms$'
-        match = re.match(pattern, log_line.strip())
-
-        if match:
-            time_str, userid, server, status, recommendations, response_time = match.groups()
-
-            return {
-                'timestamp': time_str,
-                'user_id': int(userid),
-                'server': server,
-                'status': int(status),
-                'recommendations': recommendations,
-                'response_time_ms': float(response_time),
-                'model_version': self._extract_model_version(server, recommendations)
-            }
-        return None
-
-    def _extract_model_version(self, server: str, recommendations: str) -> Optional[str]:
-        """Extract model version from server name or recommendations metadata"""
-        # Can be customized based on your versioning scheme
-        # For now, extract from server name if it contains version info
-        import re
-        version_match = re.search(r'v(\d+)', server)
-        if version_match:
-            return version_match.group(0)
-        return None
-
-    def ingest_kafka_logs(self, kafka_reader: KafkaLogReader, batch_size: int = 100):
-        """
-        Ingest recommendation request logs from Kafka stream.
-        """
-        logger.info(f"Ingesting {batch_size} recommendation logs from Kafka...")
-
-        logs_ingested = 0
-        cursor = self.conn.cursor()
-
-        for log_line in kafka_reader.consume_batch(batch_size):
-            parsed = self.parse_kafka_recommendation_log(log_line)
-
-            if parsed:
-                try:
-                    cursor.execute('''
-                        INSERT INTO recommendation_requests
-                        (timestamp, user_id, server, status, recommendations, response_time_ms, model_version)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        parsed['timestamp'],
-                        parsed['user_id'],
-                        parsed['server'],
-                        parsed['status'],
-                        parsed['recommendations'],
-                        parsed['response_time_ms'],
-                        parsed['model_version']
-                    ))
-                    logs_ingested += 1
-                except Exception as e:
-                    logger.error(f"Failed to ingest log: {e}")
-
-        self.conn.commit()
-        logger.info(f"Ingested {logs_ingested} recommendation request logs")
-        return logs_ingested
 
     def compute_availability_metrics(self, window_minutes: int = 60) -> Dict:
         """
         Compute service availability metrics for the specified time window.
+        Uses the recommendations table populated by inference telemetry.
         """
         query = f"""
             SELECT
@@ -190,7 +103,7 @@ class ServiceHealthMonitor:
                 SUM(CASE WHEN status != 200 THEN 1 ELSE 0 END) as failed_requests,
                 AVG(CASE WHEN status = 200 THEN response_time_ms END) as avg_response_time,
                 model_version
-            FROM recommendation_requests
+            FROM recommendations
             WHERE timestamp >= datetime('now', '-{window_minutes} minutes')
             GROUP BY model_version
         """
@@ -212,7 +125,7 @@ class ServiceHealthMonitor:
         # Get response time percentiles
         response_times_query = f"""
             SELECT response_time_ms
-            FROM recommendation_requests
+            FROM recommendations
             WHERE timestamp >= datetime('now', '-{window_minutes} minutes')
               AND status = 200
             ORDER BY response_time_ms
@@ -252,6 +165,7 @@ class ServiceHealthMonitor:
     def compute_model_version_metrics(self, window_minutes: int = 60) -> List[Dict]:
         """
         Compute separate metrics for each model version (for A/B testing).
+        Uses the recommendations table populated by inference telemetry.
         """
         query = f"""
             SELECT
@@ -260,7 +174,7 @@ class ServiceHealthMonitor:
                 SUM(CASE WHEN status = 200 THEN 1 ELSE 0 END) as successful_requests,
                 AVG(CASE WHEN status = 200 THEN response_time_ms END) as avg_response_time,
                 COUNT(DISTINCT user_id) as unique_users
-            FROM recommendation_requests
+            FROM recommendations
             WHERE timestamp >= datetime('now', '-{window_minutes} minutes')
               AND model_version IS NOT NULL
             GROUP BY model_version

@@ -170,19 +170,43 @@ def recommend(user_id):
     """
     Generate recommendations for a given user_id.
     """
+    start_time = time.time()  # Start timing for monitoring
     print(f"Received recommendation request for user_id: {user_id}")
     conn = get_db()
     telemetry = Telemetry(conn)
-    print
+
+    status_code = 200
+    recommendation_response = None
+
     try:
         # 1. Convert user_id from URL to the correct type.
         # Check if user_id is purely numeric first
         if user_id.isdigit():
             raw_user_id = int(user_id)
-            
+
         else:
+            status_code = 400
+            response_time_ms = (time.time() - start_time) * 1000
+            telemetry.log('recommendation', {
+                'user_id': user_id,
+                'recommended_items': '',
+                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                'status': status_code,
+                'response_time_ms': response_time_ms,
+                'server': 'inference-server'
+            })
             return jsonify({"error": "user_id must be an integer."}), 400
     except ValueError:
+        status_code = 400
+        response_time_ms = (time.time() - start_time) * 1000
+        telemetry.log('recommendation', {
+            'user_id': user_id,
+            'recommended_items': '',
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'status': status_code,
+            'response_time_ms': response_time_ms,
+            'server': 'inference-server'
+        })
         return jsonify({"error": "Invalid user_id format."}), 400
 
     try:
@@ -190,11 +214,15 @@ def recommend(user_id):
         logging.info(f"User {raw_user_id} mapped to inner ID {inner_uid}.")
     except ValueError:
         logging.warning(f"User {raw_user_id} not found in trainset. Using fallback recommendations.")
-        recommendation_response =  get_random_fallback(fallback_pool, n=20)
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        response_time_ms = (time.time() - start_time) * 1000
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
-            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'status': status_code,
+            'response_time_ms': response_time_ms,
+            'server': 'inference-server'
         })
         return jsonify(recommendation_response)
 
@@ -202,19 +230,24 @@ def recommend(user_id):
     rated_items_inner = {iid for (iid, r) in trainset.ur[inner_uid]}
     all_items_inner = set(trainset.all_items())
     unrated_items_inner = all_items_inner - rated_items_inner
-    
+
     # 4. Format this set as a "testset" for the predict() function
     testset_for_user = [
-        (raw_user_id, trainset.to_raw_iid(iid), 4.0) 
+        (raw_user_id, trainset.to_raw_iid(iid), 4.0)
         for iid in unrated_items_inner
     ]
 
     if not testset_for_user:
-        recommendation_response =  get_random_fallback(fallback_pool, n=20)
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        response_time_ms = (time.time() - start_time) * 1000
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
-            'timestamp': None
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'model_version': 'fallback_v1',
+            'status': status_code,
+            'response_time_ms': response_time_ms,
+            'server': 'inference-server'
         })
         return jsonify(recommendation_response), 200
 
@@ -223,10 +256,15 @@ def recommend(user_id):
     # nmf_predictions = model_nmf.test(testset_for_user)
 
     recommendation_response = get_top_n(svd_predictions, n=20)
+    response_time_ms = (time.time() - start_time) * 1000
     telemetry.log('recommendation', {
         'user_id': raw_user_id,
         'recommended_items': recommendation_response,
-        'timestamp': None
+        'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'model_version': 'svd_v1',
+        'status': status_code,
+        'response_time_ms': response_time_ms,
+        'server': 'inference-server'
     })
     # changes added
     return jsonify(recommendation_response)

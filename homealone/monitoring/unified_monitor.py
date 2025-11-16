@@ -19,6 +19,7 @@ from service_health import ServiceHealthMonitor
 from model_quality_monitor import ModelQualityMonitor
 from data_drift_monitor import DataDriftMonitor
 from prometheus_exporter import PrometheusExporter
+from config import MonitoringConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -387,24 +388,25 @@ class UnifiedMonitor:
 if __name__ == "__main__":
     logger.info("Starting Unified Monitoring System")
 
-    # Check for test mode
-    test_mode = os.getenv('TEST_MODE', 'false').lower() == 'true'
+    # Print configuration
+    MonitoringConfig.print_config()
 
-    # Load alert configuration (optional)
-    alert_config = {
-        'email_enabled': False,  # Set to True and configure SMTP settings
-        'smtp': {
-            # 'host': 'smtp.gmail.com',
-            # 'port': 587,
-            # 'username': 'your-email@gmail.com',
-            # 'password': 'your-password',
-            # 'from_email': 'your-email@gmail.com',
-            # 'to_email': 'team@example.com'
-        },
-        'slack_webhook_url': None  # Add Slack webhook URL here if desired
-    }
+    # Validate configuration
+    if not MonitoringConfig.validate():
+        logger.warning("Configuration validation failed, but continuing...")
 
-    monitor = UnifiedMonitor(alert_config=alert_config)
+    # Load configuration from environment
+    test_mode = MonitoringConfig.TEST_MODE
+    alert_config = MonitoringConfig.ALERT_CONFIG
+
+    logger.info(f"Test Mode: {test_mode}")
+    logger.info(f"Email Alerts: {'Enabled' if alert_config['email_enabled'] else 'Disabled'}")
+
+    monitor = UnifiedMonitor(
+        db_path=MonitoringConfig.DB_PATH,
+        reports_dir=MonitoringConfig.REPORTS_DIR,
+        alert_config=alert_config
+    )
 
     try:
         monitor.start_monitoring(test_mode=test_mode)

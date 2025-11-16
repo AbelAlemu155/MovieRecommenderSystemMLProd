@@ -105,7 +105,7 @@ class ModelQualityMonitor:
 
         # Get recommendations from the past window
         rec_query = f"""
-            SELECT user_id, recommendations, timestamp, model_version
+            SELECT user_id, recommended_items, timestamp, model_version
             FROM recommendations
             WHERE timestamp >= datetime('now', '-{window_hours} hours')
         """
@@ -147,9 +147,9 @@ class ModelQualityMonitor:
 
             # Parse recommended movie IDs
             recommended_movies = []
-            if rec_row['recommendations']:
+            if rec_row['recommended_items']:
                 try:
-                    recommended_movies = rec_row['recommendations'].split(',')
+                    recommended_movies = rec_row['recommended_items'].split(',')
                 except:
                     continue
 

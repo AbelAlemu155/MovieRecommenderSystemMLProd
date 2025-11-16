@@ -4,9 +4,10 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://monitoring:8000
+    url: http://prometheus:9090
+    uid: prometheus-datasource
     isDefault: true
     editable: true
     jsonData:
       httpMethod: GET
-      timeInterval: 30s
+      timeInterval: 15s
