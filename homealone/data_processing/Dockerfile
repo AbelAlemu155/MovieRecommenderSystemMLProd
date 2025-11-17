@@ -18,11 +18,11 @@ COPY requirements.txt .
 
 RUN pip install -r requirements.txt
 
-COPY . ./data_processing/
+COPY . ./
 
 RUN mkdir -p /root/.ssh && \
     ssh-keyscan -H 128.2.220.241 >> /root/.ssh/known_hosts 2>/dev/null || true
 
 VOLUME ["/app/db", "/app/data_queues"]
 
-CMD ["python", "/app/data_processing/process.py"]
+CMD ["python", "/app/process.py"]

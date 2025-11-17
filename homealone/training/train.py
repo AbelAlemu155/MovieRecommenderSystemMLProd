@@ -8,10 +8,18 @@ import pickle
 import time
 import logging
 from datetime import datetime, timedelta
+import subprocess
+import hashlib
+import json
+
+
+from data_provenance import DataProvenance
+from model_provenance import ModelProvenance
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 
 class Training:
@@ -21,11 +29,20 @@ class Training:
         self.trainset = None
         self.conn = None
         self.model_path = '/app/models/'
+        self.data_path = '/app/db/dvc_data/'
         
         # Evaluation configuration - percentage-based
         self.test_percentage = 0.30
-        self.retrain_threshold = 0.05
         self.training_cutoff = None
+        self.periodic_training_interval = 60 * 60 * 1  # secs * mins * N hours in seconds
+        self.last_training_time = None
+
+
+        # setup provenance tracking
+        self.model_prov = ModelProvenance()
+        self.data_prov = DataProvenance()
+        self.model_prov.initialize()
+        self.data_prov.initialize()
         
         self._connect()
         self._create_metadata_table()
@@ -57,69 +74,102 @@ class Training:
                 best_model TEXT
             )
         ''')
-        self.conn.commit()
-        logger.info("Training metadata table created")
 
-    def get_last_training_sample_count(self):
-        """Get the number of samples used in last training run"""
-        query = """
-            SELECT total_samples
-            FROM training_metadata
-            ORDER BY training_timestamp DESC
-            LIMIT 1
-        """
-        result = pd.read_sql_query(query, self.conn)
-        
-        if len(result) == 0:
-            return 0  # First training run
-        
-        return result.iloc[0]['total_samples']
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS model_deployment (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deployment_timestamp DATETIME,
+                model_name TEXT,
+                model_version_hash TEXT,
+                data_version_hash TEXT,
+                git_commit_hash TEXT,
+                mlflow_run_id TEXT,
+                training_id INTEGER,
+                is_active BOOLEAN DEFAULT 1,
+                FOREIGN KEY (training_id) REFERENCES training_metadata(id)
+            )
+        ''')
+        self.conn.commit()
+        logger.info("Training metadata tables created")
+
+    def get_git_commit(self):
+        """Get current Git commit hash (pipeline version)"""
+        commit = os.getenv('GIT_COMMIT', 'unknown')
+        logger.info(f"Git commit: {commit[:8] if commit != 'unknown' else commit}")
+        return commit
+
+
+    def calculate_model_hash(self, model_file):
+        """Calculate hash of model file for versioning"""
+        import hashlib
+        with open(model_file, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()[:8]
+
     
-    def should_retrain(self):
+    def export_data_to_parquet(self, train_df, test_df):
+        """Export training data to Parquet with FULL dataset + splits"""
+        logger.info("Exporting training data to Parquet...")
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Create directories
+        raw_dir = f'{self.data_path}/raw'
+        splits_dir = f'{self.data_path}/splits'
+        os.makedirs(raw_dir, exist_ok=True)
+        os.makedirs(splits_dir, exist_ok=True)
+        
+        # Export full dataset
+        query = f"""
+            SELECT user_id, movie_id, rating, rated_at
+            FROM {self.table_name}
+            ORDER BY rated_at ASC
         """
-        Determine if retraining is necessary based on new data volume.
-        Retrain only if we have at least 10% more data than last training.
+        full_df = pd.read_sql_query(query, self.conn)
         
-        Returns:
-            should_train (bool): Whether to retrain
-            current_count (int): Current total data count
-            new_data_count (int): Number of new samples since last training
-        """
-        # Get current total data count
-        query = f"SELECT COUNT(*) as count FROM {self.table_name}"
-        current_count = pd.read_sql_query(query, self.conn).iloc[0]['count']
+        full_file = f'{raw_dir}/ratings_full_{timestamp}.parquet'
+        full_df.to_parquet(full_file, engine='pyarrow', compression='snappy', index=False)
         
-        # Get last training count
-        last_count = self.get_last_training_sample_count()
+        # Export train/test splits
+        train_file = f'{splits_dir}/train_{timestamp}.parquet'
+        test_file = f'{splits_dir}/test_{timestamp}.parquet'
         
-        if last_count == 0:
-            logger.info("First training run - will train")
-            return True, current_count, 0
+        train_df.to_parquet(train_file, engine='pyarrow', compression='snappy', index=False)
+        test_df.to_parquet(test_file, engine='pyarrow', compression='snappy', index=False)
         
-        # Calculate new data percentage
-        new_data_count = current_count - last_count
-        new_data_percentage = (new_data_count / last_count) * 100 if last_count > 0 else 100
+        # Create symlinks
+        for src, link_name in [
+            (full_file, f'{raw_dir}/ratings_latest.parquet'),
+            (train_file, f'{splits_dir}/train_latest.parquet'),
+            (test_file, f'{splits_dir}/test_latest.parquet')
+        ]:
+            if os.path.exists(link_name):
+                os.remove(link_name)
+            os.symlink(os.path.basename(src), link_name)
         
-        logger.info(f"Data Status:")
-        logger.info(f"  Current: {current_count} ratings")
-        logger.info(f"  Last training: {last_count} ratings")
-        logger.info(f"  New data: {new_data_count} ratings ({new_data_percentage:.1f}%)")
+        # Calculate data hash
+        data_hash = hashlib.md5(
+            full_df.head(1000).to_csv(index=False).encode()
+        ).hexdigest()[:8]
         
-        # Retrain if we have at least 10% more data
-        threshold_percentage = self.retrain_threshold * 100
-        if new_data_percentage >= threshold_percentage:
-            logger.info(f"New data exceeds threshold ({new_data_percentage:.1f}% >= {threshold_percentage}%)")
-            return True, current_count, new_data_count
-        else:
-            logger.info(f"Insufficient new data ({new_data_percentage:.1f}% < {threshold_percentage}%)")
-            logger.info(f"Need {int(last_count * self.retrain_threshold - new_data_count)} more ratings")
-            return False, current_count, new_data_count
-    
+        logger.info(f"Full dataset: {len(full_df)} rows")
+        logger.info(f"Train split: {len(train_df)} rows")
+        logger.info(f"Test split: {len(test_df)} rows")
+        logger.info(f"Data hash: {data_hash}")
+        
+        return {
+            'full_file': full_file,
+            'train_file': train_file,
+            'test_file': test_file,
+            'data_hash': data_hash,
+            'timestamp': timestamp
+        }
+
+
+
     def get_percentage_based_split(self):
         """
         Split data by percentage (temporal ordering).
-        - Train on: First 90% of data (oldest)
-        - Test on: Last 10% of data (most recent)
         
         Returns:
             train_df, test_df, cutoff_timestamp
@@ -178,21 +228,19 @@ class Training:
         if filtered_count > 0:
             logger.info(f"Filtered {filtered_count} cold-start test samples")
         
-        logger.info("=" * 60)
         logger.info(f"Training set: {len(train_df)} ratings ({len(train_df)/len(df)*100:.1f}%)")
         logger.info(f"  Date range: {train_df['rated_at'].min()} to {train_df['rated_at'].max()}")
         logger.info(f"Test set: {len(test_df)} ratings ({len(test_df)/len(df)*100:.1f}%)")
         logger.info(f"  Date range: {test_df['rated_at'].min()} to {test_df['rated_at'].max()}")
         logger.info(f"Training cutoff: {cutoff_timestamp}")
         logger.info(f"Unique users: {len(train_users)}, Unique movies: {len(train_movies)}")
-        logger.info("=" * 60)
         
         return train_df, test_df, cutoff_timestamp
     
     def load_data_for_training(self):
         """
         Load data and create trainset for model training.
-        Uses percentage-based split: 90% train, 10% test.
+        Uses percentage-based split: 70% train, 30% test.
         """
         train_df, test_df, self.training_cutoff = self.get_percentage_based_split()
         
@@ -219,6 +267,7 @@ class Training:
         with open(file_path, 'wb') as f:
             pickle.dump(self.trainset, f)
         logger.info("Trainset saved")
+        return file_path
     
     def train_svd(self):
         """Train SVD model"""
@@ -227,14 +276,6 @@ class Training:
         model_svd.fit(self.trainset)
         logger.info("SVD model trained")
         return model_svd
-    
-    def train_knn(self):
-        """Train KNN model"""
-        logger.info("Training KNN model...")
-        model_knn = KNNBasic(sim_options={'user_based': True})
-        model_knn.fit(self.trainset)
-        logger.info("KNN model trained")
-        return model_knn
     
     def train_nmf(self):
         """Train NMF model"""
@@ -249,6 +290,7 @@ class Training:
         logger.info(f"Saving model to {file_path}")
         dump.dump(file_path, algo=model)
         logger.info("Model saved")
+        return file_path
     
     def evaluate_model(self, model, test_df, model_name):
         """Evaluate model on test set"""
@@ -270,7 +312,20 @@ class Training:
         
         return rmse
     
-    def log_training_metadata(self, train_df, test_df, evaluation_results):
+    def save_provenance_manifest(self, provenance_data):
+        """
+        This allows anyone to trace back from model > data > code.
+        """
+        manifest_path = os.path.join(self.model_path, 'provenance_manifest.json')
+        
+        with open(manifest_path, 'w') as f:
+            json.dump(provenance_data, f, indent=2)
+        
+        logger.info(f"Provenance manifest saved: {manifest_path}")
+        return manifest_path
+    
+    def log_training_metadata(self, train_df, test_df, evaluation_results,
+                              mlflow_run_id, data_version, git_commit, model_version):
         """Log training run metadata with retry logic"""
         max_retries = 3
         
@@ -292,8 +347,9 @@ class Training:
                         n_train_samples, n_test_samples, total_samples,
                         train_date_range_start, train_date_range_end,
                         test_date_range_start, test_date_range_end,
-                        svd_rmse, knn_rmse, nmf_rmse, best_model
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        svd_rmse, nmf_rmse, best_model,
+                        mlflow_run_id, data_version_hash, git_commit_hash, model_version_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     datetime.now().isoformat(),
                     self.training_cutoff.isoformat() if self.training_cutoff else None,
@@ -305,13 +361,46 @@ class Training:
                     str(test_df['rated_at'].min()) if test_df is not None and len(test_df) > 0 else None,
                     str(test_df['rated_at'].max()) if test_df is not None and len(test_df) > 0 else None,
                     evaluation_results.get('svd_rmse'),
-                    evaluation_results.get('knn_rmse'),
                     evaluation_results.get('nmf_rmse'),
-                    best_model_name
+                    best_model_name,
+                    mlflow_run_id,
+                    data_version,
+                    git_commit,
+                    model_version
+                ))
+
+
+                training_id = cursor.lastrowid
+
+
+                cursor.execute('UPDATE model_deployment SET is_active = 0')
+
+
+                cursor.execute('''
+                    INSERT INTO model_deployment (
+                        deployment_timestamp, model_name,
+                        model_version_hash, data_version_hash, git_commit_hash,
+                        mlflow_run_id, training_id, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                ''', (
+                    datetime.now().isoformat(),
+                    best_model_name or 'svd',
+                    model_version,
+                    data_version,
+                    git_commit,
+                    mlflow_run_id,
+                    training_id
                 ))
                 
                 self.conn.commit()
-                logger.info("Training metadata logged")
+                logger.info("Training metadata and deployment logged")
+
+
+                # log to mlflow
+                if hasattr(self, 'current_run_id') and self.current_run_id:
+                    self.model_prov.log_metrics({
+                        k:v for k,v in evaluation_results.items() if v is not None
+                    })
                 return
                 
             except sqlite3.OperationalError as e:
@@ -323,74 +412,227 @@ class Training:
                     logger.error(f"Failed to log metadata: {e}")
                     return
 
+
 if __name__ == "__main__":
     trainer = Training()
     
     while True:
-        logger.info("=" * 60)
+        # check training status
         logger.info(f"Checking training status at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info("=" * 60)
         
-        should_train, current_count, new_data = trainer.should_retrain()
+        # Check if enough time has passed since last training
+        should_train = False
+        if trainer.last_training_time is None:
+            should_train = True
+            logger.info("First training run - will train")
+        else:
+            time_since_last = (datetime.now() - trainer.last_training_time).total_seconds()
+            should_train = time_since_last >= trainer.periodic_training_interval
+            if should_train:
+                logger.info(f"Periodic training triggered ({time_since_last/3600:.1f} hours since last training)")
+            else:
+                hours_remaining = (trainer.periodic_training_interval - time_since_last) / 3600
+                logger.info(f"Not yet time for training ({hours_remaining:.1f} hours remaining)")
         
+        # If not time for training, wait and check again
         if not should_train:
-            logger.info("Skipping training - insufficient new data")
-            
-            # Check again in 3 hours
-            wait_time = 60 * 60 * 1
-            logger.info(f"Next check in 1 hour ({(datetime.now() + timedelta(hours=1)).strftime('%H:%M:%S')})")
-            logger.info("=" * 60)
+            wait_time = trainer.periodic_training_interval / 4
+            logger.info(f"Waiting for {wait_time} seconds...")
+            logger.info(f"Next check at {(datetime.now() + timedelta(seconds=wait_time)).strftime('%H:%M:%S')}")
             time.sleep(wait_time)
             continue
         
         logger.info("Starting training cycle...")
+
+        git_commit = trainer.get_git_commit()
         
-        # Load data
+        # Get current data count for logging
+        query = f"SELECT COUNT(*) as count FROM {trainer.table_name}"
+        current_count = pd.read_sql_query(query, trainer.conn).iloc[0]['count']
+        logger.info(f"Current data: {current_count} ratings")
+        
+        run_id = trainer.model_prov.start_run(
+            run_name=f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            tags={'trigger': 'periodic', 'total_data_count': str(current_count), 'git_commit': git_commit[:8]}
+        )
+        trainer.current_run_id = run_id
+
         train_df, test_df = trainer.load_data_for_training()
-        
+
         if train_df is None:
-            logger.error("Failed to load training data. Retrying in 1 hour...")
-            time.sleep(3600)
+            trainer.model_prov.end_run(status='FAILED')
+            time.sleep(60)
             continue
+
+
+        # data versioning
+        try:
+            logger.info("Data versioning...")
+            
+            # Export data to Parquet
+            data_info = trainer.export_data_to_parquet(train_df, test_df)
+
+
+            trainer.data_prov.version_data(data_info['full_file'], push=True)
+            trainer.data_prov.version_data(data_info['train_file'], push=True)
+            trainer.data_prov.version_data(data_info['test_file'], push=True)
+
+
+            data_version = data_info['data_hash']
+
+
+            trainer.model_prov.log_data_version(data_version, {
+                'full_size': len(pd.read_parquet(data_info['full_file'])),
+                'train_size': len(train_df),
+                'test_size': len(test_df),
+                'format': 'parquet',
+                'timestamp': data_info['timestamp'],
+                'compression': 'snappy'
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to version data: {e}")
+            trainer.model_prov.end_run(status='FAILED')
+            continue
+
+
+        # log config
+        trainer.model_prov.log_params({
+            'git_commit': git_commit,
+            'data_version': data_version,
+            'train_size': len(train_df),
+            'test_size': len(test_df),
+            'svd_n_factors': 20,
+            'svd_lr': 0.01,
+            'nmf_n_factors': 20,
+            'training_cutoff': trainer.training_cutoff.isoformat() if trainer.training_cutoff else None
+        })
         
         # Train models
         model_svd = trainer.train_svd()
-        model_knn = trainer.train_knn()
         model_nmf = trainer.train_nmf()
         
         # Save models
-        trainer.save_model(model_svd, '/app/models/svd_model.dump')
-        trainer.save_model(model_knn, '/app/models/knn_model.dump')
-        trainer.save_model(model_nmf, '/app/models/nmf_model.dump')
-        trainer.save_trainset()
+        svd_path = trainer.save_model(model_svd, '/app/models/svd_model.dump')
+        nmf_path = trainer.save_model(model_nmf, '/app/models/nmf_model.dump')
+        trainset_path = trainer.save_trainset()
         
-        logger.info("All models trained and deployed")
+        model_version = trainer.calculate_model_hash(svd_path)
+        logger.info(f"Model version hash: {model_version}")
+
+        
+        logger.info("Model versioning...")
+        
+        
+        try:
+            # Log to MLflow
+            trainer.model_prov.log_artifact(svd_path, artifact_path="models")
+            trainer.model_prov.log_artifact(nmf_path, artifact_path="models")
+            trainer.model_prov.log_artifact(trainset_path, artifact_path="models")
+            logger.info("Models logged to mlflow")
+            
+            # Version with DVC
+            trainer.data_prov.version_data('models/svd_model.dump', push=True)
+            trainer.data_prov.version_data('models/nmf_model.dump', push=True)
+            trainer.data_prov.version_data('models/trainset.dump', push=True)
+            logger.info("Models versioned with DVC")
+
+
+            provenance_data = {
+                'model_version': model_version,
+                'data_version': data_version,
+                'git_commit': git_commit,
+                'mlflow_run_id': run_id,
+                'training_timestamp': datetime.now().isoformat(),
+                'model_files': {
+                    'svd': 'models/svd_model.dump',
+                    'nmf': 'models/nmf_model.dump',
+                    'trainset': 'models/trainset.dump'
+                },
+                'data_files': {
+                    'full': data_info['full_file'],
+                    'train': data_info['train_file'],
+                    'test': data_info['test_file']
+                },
+                'hyperparameters': {
+                    'svd_n_factors': 20,
+                    'svd_lr': 0.01,
+                    'svd_reg': 0.01,
+                    'svd_epochs': 20
+                }
+            }
+
+
+            manifest_path = trainer.save_provenance_manifest(provenance_data)
+            trainer.model_prov.log_artifact(manifest_path)
+
+
+            logger.info("Models and provenance versioned")
+            
+        except Exception as e:
+            logger.error(f"Failed to version models: {e}")
+
         
         
         evaluation_results = {}
         if test_df is not None and len(test_df) >= 10:
-            logger.info("=" * 60)
             logger.info("Evaluating models on most recent data...")
-            logger.info("=" * 60)
             
             evaluation_results['svd_rmse'] = trainer.evaluate_model(model_svd, test_df, 'SVD')
-            evaluation_results['knn_rmse'] = trainer.evaluate_model(model_knn, test_df, 'KNN')
             evaluation_results['nmf_rmse'] = trainer.evaluate_model(model_nmf, test_df, 'NMF')
-            
             valid_results = {k: v for k, v in evaluation_results.items() if v is not None}
             if valid_results:
                 best = min(valid_results.items(), key=lambda x: x[1])
                 logger.info(f"Best model: {best[0].upper()} (RMSE: {best[1]:.4f})")
         else:
             logger.warning("Insufficient test data for evaluation")
-        
+            reason = ""
+            if test_df is None:
+                reason = "test_df is None"
+                logger.warning("  Reason: test_df is None")
+            else:
+                reason = f"Only {len(test_df)} test samples"
+                logger.warning(f"  Reason: Only {len(test_df)} test samples (need >= 10)")
+            logger.warning("Model will be logged WITHOUT evaluation metrics")
+
+
+            trainer.model_prov.log_params({
+                'evaluation_skipped': True,
+                'evaluation_skip_reason': reason,
+            })
+
+
         # Log metadata
-        trainer.log_training_metadata(train_df, test_df, evaluation_results)
+        trainer.log_training_metadata(
+            train_df, test_df, evaluation_results,
+            mlflow_run_id=run_id,
+            data_version=data_version,
+            git_commit=git_commit,
+            model_version=model_version
+        )
         
-        logger.info("=" * 60)
-        logger.info("Training cycle complete")
-        logger.info("Will check for retraining in 1 hour")
-        logger.info("=" * 60)
+        if not evaluation_results:
+            trainer.model_prov.end_run(status='FAILED')
+            logger.error("Training marked as FAILED due to missing evaluation")
+        else:
+            trainer.model_prov.end_run(status='FINISHED')
+            logger.info("Training completed successfully")
         
-        # Check every 1 hour
-        time.sleep(60 * 60 * 1)
+        # Update last training time
+        trainer.last_training_time = datetime.now()
+        logger.info(f"Training completed at {trainer.last_training_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Next training in {trainer.periodic_training_interval/3600:.0f} hours")
+            
+        logger.info("Training Completed")
+        logger.info(f"Model Version: {model_version}")
+        logger.info(f"Data Version: {data_version}")
+        logger.info(f"Git Commit: {git_commit[:8]}")
+        logger.info(f"MLflow Run: {run_id}")
+        logger.info("View experiments at: http://localhost:5000")
+        if evaluation_results:
+            logger.info(f"Metrics: {evaluation_results}")
+        else:
+            logger.info("Metrics: NONE (insufficient test data)")
+        
+        # Check every 15 minutes
+        time.sleep(60 * 15)

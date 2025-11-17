@@ -3,6 +3,8 @@ services:
     build:
       context: homealone/training
       dockerfile: Dockerfile
+      args:
+        - GIT_COMMIT=${GIT_COMMIT:-unknown}
     volumes:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
@@ -12,6 +14,10 @@ services:
       options:
         max-size: "25m"
         max-file: "3"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
 
   inference:
     build:
@@ -35,7 +41,7 @@ services:
     build:
       context: homealone/data_processing
       dockerfile: Dockerfile
-    command: python /app/data_processing/process.py
+    command: python /app/process.py
     environment:
       - TUNNEL_USER=${TUNNEL_USER}
       - TUNNEL_IP=${TUNNEL_IP}
@@ -55,7 +61,7 @@ services:
     build:
       context: homealone/data_processing
       dockerfile: Dockerfile
-    command: python /app/data_processing/db_writer.py
+    command: python /app/db_writer.py
     volumes:
       - ./homealone/db:/app/db
       - ./homealone/data_processing/data_queues:/app/data_queues
@@ -88,3 +94,23 @@ services:
       options:
         max-size: "25m"
         max-file: "3"
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts *
+      --backend-store-uri sqlite:///app/db/mlflow.db
+      --default-artifact-root /app/db/mlflow_artifacts
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    volumes:
+      - ./homealone/db:/app/db
