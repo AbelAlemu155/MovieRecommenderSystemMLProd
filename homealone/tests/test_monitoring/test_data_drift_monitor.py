@@ -499,6 +499,5 @@ def test_window_configurations(monitor, window_type, expected_hours):
     """Test that window configurations are set correctly"""
     assert monitor.windows[window_type]['hours'] == expected_hours
 
-
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '--tb=short'])
