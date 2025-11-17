@@ -190,8 +190,14 @@ def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DATABASE, timeout=30.0)
         # Enable WAL mode for better concurrency
-        g.db.execute('PRAGMA journal_mode=WAL')
-        g.db.execute('PRAGMA synchronous=NORMAL')
+        try:
+            g.db.execute('PRAGMA journal_mode=WAL')
+            g.db.execute('PRAGMA synchronous=NORMAL')
+        except sqlite3.OperationalError as e:
+            # WAL mode might already be enabled or database might be locked
+            # This is not critical, so we can continue
+            print(f"Warning: Could not set WAL mode: {e}")
+            pass
     return g.db
 
 @app.teardown_appcontext
@@ -228,49 +234,91 @@ def recommend(user_id):
     conn = get_db()
     telemetry = Telemetry(conn)
     
+    start_time = time.time()  # Start timing for monitoring
+    print(f"Received recommendation request for user_id: {user_id}")
+    # Create separate connection for telemetry to avoid Flask g context issues
+    # Use longer timeout for Windows Docker volume issues
+    telemetry_conn = sqlite3.connect(DATABASE, timeout=60.0, check_same_thread=False)
+    telemetry = Telemetry(telemetry_conn)
+
+    status_code = 200
+    recommendation_response = None
+
+    try:
+        # 1. Convert user_id from URL to the correct type.
+        # Check if user_id is purely numeric first
+        if user_id.isdigit():
+            raw_user_id = int(user_id)
+
+        else:
+            status_code = 400
+            response_time_ms = (time.time() - start_time) * 1000
+            telemetry.log('recommendation', {
+                'user_id': user_id,
+                'recommended_items': '',
+                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                'status': status_code,
+                'response_time_ms': response_time_ms,
+                'server': 'inference-server'
+            })
+            telemetry_conn.close()
+            return jsonify({"error": "user_id must be an integer."}), 400
+    except ValueError:
+        status_code = 400
+        response_time_ms = (time.time() - start_time) * 1000
+        telemetry.log('recommendation', {
+            'user_id': user_id,
+            'recommended_items': '',
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'status': status_code,
+            'response_time_ms': response_time_ms,
+            'server': 'inference-server'
+        })
+        telemetry_conn.close()
+        return jsonify({"error": "Invalid user_id format."}), 400
+
     try:
         inner_uid = trainset.to_inner_uid(raw_user_id)
     except ValueError:
-        logging.warning(f"User {raw_user_id} not in trainset. Using fallback.")
-        recommendation_response = get_random_fallback_simple(n=20)
+        logging.warning(f"User {raw_user_id} not found in trainset. Using fallback recommendations.")
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        response_time_ms = (time.time() - start_time) * 1000
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
-            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'model_version': 'fallback_v1',
+            'status': status_code,
+            'response_time_ms': response_time_ms,
+            'server': 'inference-server'
         })
-        logging.warning(recommendation_response)
-        return recommendation_response
-    
-    # Get unrated items
+        telemetry_conn.close()
+        return jsonify(recommendation_response)
+
+    # 3. Find all items the user has NOT rated (efficiently)
     rated_items_inner = {iid for (iid, r) in trainset.ur[inner_uid]}
     all_items_inner = set(trainset.all_items())
     unrated_items_inner = all_items_inner - rated_items_inner
-    
-    MAX_PREDICTIONS = 200
-    if len(unrated_items_inner) > MAX_PREDICTIONS:
-        popular_items = {item['movie_id'] for item in fallback_pool[:500]}
-        popular_unrated = unrated_items_inner & {trainset.to_inner_iid(iid) for iid in popular_items if trainset.knows_item(iid)}
-        
-        if len(popular_unrated) >= MAX_PREDICTIONS:
-            unrated_items_inner = random.sample(list(popular_unrated), MAX_PREDICTIONS)
-        else:
-            remaining = MAX_PREDICTIONS - len(popular_unrated)
-            random_items = random.sample(list(unrated_items_inner - popular_unrated), remaining)
-            unrated_items_inner = list(popular_unrated) + random_items
-    
-    # Create testset
+
+    # 4. Format this set as a "testset" for the predict() function
     testset_for_user = [
-        (raw_user_id, trainset.to_raw_iid(iid), 4.0) 
+        (raw_user_id, trainset.to_raw_iid(iid), 4.0)
         for iid in unrated_items_inner
     ]
     
     if not testset_for_user:
-        recommendation_response = get_random_fallback_simple(n=20)
+        recommendation_response = get_random_fallback(fallback_pool, n=20)
+        response_time_ms = (time.time() - start_time) * 1000
         telemetry.log('recommendation', {
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
-            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'model_version': 'fallback_v1',
+            'status': status_code,
+            'response_time_ms': response_time_ms,
+            'server': 'inference-server'
         })
+        telemetry_conn.close()
         return jsonify(recommendation_response), 200
     
     # svd_predictions = model_svd.test(testset_for_user)
@@ -287,15 +335,23 @@ def recommend(user_id):
 
     
     recommendation_response = get_top_n(predictions, n=20)
+
+    recommendation_response = get_top_n(svd_predictions, n=20)
+    response_time_ms = (time.time() - start_time) * 1000
     telemetry.log('recommendation', {
         'user_id': raw_user_id,
         'recommended_items': recommendation_response,
         'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-        'response_time_ms': int(elapsed * 1000)
+        'model_version': 'svd_v1',
+        'status': status_code,
+        'response_time_ms': response_time_ms,
+        'server': 'inference-server'
     })
-    logging.warning(recommendation_response)
-    
-    return recommendation_response
+    # Close telemetry connection
+    telemetry_conn.close()
+    # changes added
+    return jsonify(recommendation_response)
+
 
 
 if __name__ == '__main__':
