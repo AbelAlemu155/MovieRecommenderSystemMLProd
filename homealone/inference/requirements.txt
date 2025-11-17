@@ -3,3 +3,4 @@ scikit-surprise
 sqlalchemy
 pandas
 flask
+watchdog==3.0.0

@@ -2,7 +2,7 @@ import mlflow
 from typing import Dict, Optional, Any, List
 import logging
 from datetime import datetime
-from homealone.provenance.config import ProvenanceConfig
+from config import ProvenanceConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class ModelProvenance:
             logger.warning("A run is already active. Ending it first.")
             self.end_run()
         
-        run_name = run_name or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        run_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         self.current_run = mlflow.start_run(run_name=run_name, tags=tags)
         run_id = self.current_run.info.run_id

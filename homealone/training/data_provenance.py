@@ -1,10 +1,9 @@
-import os
 import subprocess
 from typing import Dict, Optional, List
 from pathlib import Path
 import logging
 
-from homealone.provenance.config import ProvenanceConfig
+from config import ProvenanceConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

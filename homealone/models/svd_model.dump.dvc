@@ -1,0 +1,5 @@
+outs:
+- md5: 1d46d5c00d0fc6151be1f16039f0a2f6
+  size: 5032432
+  hash: md5
+  path: svd_model.dump
