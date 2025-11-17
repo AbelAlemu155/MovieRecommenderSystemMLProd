@@ -217,26 +217,22 @@ class UnifiedMonitor:
         try:
             logger.info("Running model quality check...")
 
-            # Compute quality metrics
-            metrics_24h = self.quality_monitor.compute_online_accuracy(window_hours=24, k=20)
+            # Compute and save per-version quality metrics
+            version_metrics = self.quality_monitor.compute_model_version_quality(window_hours=24, k=20)
+            if version_metrics:
+                for metrics in version_metrics:
+                    # Save each version's metrics
+                    self.quality_monitor.save_quality_metrics(metrics)
 
-            if metrics_24h:
-                # Save metrics
-                self.quality_monitor.save_quality_metrics(metrics_24h)
+                    # Check for alerts
+                    alerts = self.quality_monitor.check_quality_alerts(metrics)
+                    for alert in alerts:
+                        self.alert_manager.send_alert({
+                            'source': 'model_quality',
+                            **alert
+                        })
 
-                # Check for alerts
-                alerts = self.quality_monitor.check_quality_alerts(metrics_24h)
-
-                for alert in alerts:
-                    self.alert_manager.send_alert({
-                        'source': 'model_quality',
-                        **alert
-                    })
-
-                # Log model version quality
-                version_metrics = self.quality_monitor.compute_model_version_quality(window_hours=24, k=20)
-                if version_metrics:
-                    logger.info(f"Model version quality: {json.dumps(version_metrics, indent=2)}")
+                logger.info(f"Saved quality metrics for {len(version_metrics)} model versions")
 
         except Exception as e:
             logger.error(f"Error in quality check: {e}", exc_info=True)

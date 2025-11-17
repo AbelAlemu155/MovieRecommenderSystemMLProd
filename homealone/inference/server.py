@@ -149,8 +149,14 @@ def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DATABASE, timeout=30.0)
         # Enable WAL mode for better concurrency
-        g.db.execute('PRAGMA journal_mode=WAL')
-        g.db.execute('PRAGMA synchronous=NORMAL')
+        try:
+            g.db.execute('PRAGMA journal_mode=WAL')
+            g.db.execute('PRAGMA synchronous=NORMAL')
+        except sqlite3.OperationalError as e:
+            # WAL mode might already be enabled or database might be locked
+            # This is not critical, so we can continue
+            print(f"Warning: Could not set WAL mode: {e}")
+            pass
     return g.db
 
 @app.teardown_appcontext
@@ -172,8 +178,10 @@ def recommend(user_id):
     """
     start_time = time.time()  # Start timing for monitoring
     print(f"Received recommendation request for user_id: {user_id}")
-    conn = get_db()
-    telemetry = Telemetry(conn)
+    # Create separate connection for telemetry to avoid Flask g context issues
+    # Use longer timeout for Windows Docker volume issues
+    telemetry_conn = sqlite3.connect(DATABASE, timeout=60.0, check_same_thread=False)
+    telemetry = Telemetry(telemetry_conn)
 
     status_code = 200
     recommendation_response = None
@@ -195,6 +203,7 @@ def recommend(user_id):
                 'response_time_ms': response_time_ms,
                 'server': 'inference-server'
             })
+            telemetry_conn.close()
             return jsonify({"error": "user_id must be an integer."}), 400
     except ValueError:
         status_code = 400
@@ -207,6 +216,7 @@ def recommend(user_id):
             'response_time_ms': response_time_ms,
             'server': 'inference-server'
         })
+        telemetry_conn.close()
         return jsonify({"error": "Invalid user_id format."}), 400
 
     try:
@@ -220,10 +230,12 @@ def recommend(user_id):
             'user_id': raw_user_id,
             'recommended_items': recommendation_response,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'model_version': 'fallback_v1',
             'status': status_code,
             'response_time_ms': response_time_ms,
             'server': 'inference-server'
         })
+        telemetry_conn.close()
         return jsonify(recommendation_response)
 
     # 3. Find all items the user has NOT rated (efficiently)
@@ -249,6 +261,7 @@ def recommend(user_id):
             'response_time_ms': response_time_ms,
             'server': 'inference-server'
         })
+        telemetry_conn.close()
         return jsonify(recommendation_response), 200
 
     svd_predictions = model_svd.test(testset_for_user)
@@ -266,6 +279,8 @@ def recommend(user_id):
         'response_time_ms': response_time_ms,
         'server': 'inference-server'
     })
+    # Close telemetry connection
+    telemetry_conn.close()
     # changes added
     return jsonify(recommendation_response)
 

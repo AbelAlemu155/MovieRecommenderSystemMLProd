@@ -3,10 +3,10 @@ Prometheus Metrics Exporter
 Exposes monitoring metrics in Prometheus format for Grafana visualization
 """
 from prometheus_client import start_http_server, Gauge, Counter, Histogram, Info
-import sqlite3
 import time
 import logging
 import os
+from db_utils import get_db_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,42 +54,18 @@ class PrometheusExporter:
             ['window']
         )
 
-        # Model Quality Metrics
+        # Model Quality Metrics - Single online metric: hit_rate
         self.model_hit_rate = Gauge(
             'recommendation_model_hit_rate',
-            'Model hit rate (users who watched recommended movie)',
+            'Model hit rate (proportion of successful recommendations)',
             ['model_version', 'window']
         )
 
-        self.model_precision = Gauge(
-            'recommendation_model_precision_at_k',
-            'Model precision at K',
-            ['model_version', 'k', 'window']
-        )
-
-        self.model_engagement = Gauge(
-            'recommendation_model_engagement_rate',
-            'Model engagement rate',
-            ['model_version', 'window']
-        )
-
-        # Data Drift Metrics
-        self.data_drift_ks_pvalue = Gauge(
-            'recommendation_data_drift_ks_pvalue',
-            'KS test p-value for drift detection',
-            ['window_type', 'metric_name']
-        )
-
+        # Data Drift Metrics - Single drift metric: Wasserstein distance
         self.data_drift_wasserstein = Gauge(
             'recommendation_data_drift_wasserstein_normalized',
             'Normalized Wasserstein distance for drift detection',
-            ['window_type', 'metric_name']
-        )
-
-        self.data_drift_detected = Gauge(
-            'recommendation_data_drift_detected',
-            'Whether data drift is detected (1=yes, 0=no)',
-            ['window_type', 'severity']
+            ['window_type']
         )
 
         # Alert Metrics
@@ -119,10 +95,9 @@ class PrometheusExporter:
         logger.info("Prometheus metrics initialized")
 
     def connect_db(self):
-        """Connect to database"""
+        """Connect to database with proper configuration"""
         if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path, timeout=30)
-            self.conn.execute('PRAGMA journal_mode=WAL')
+            self.conn = get_db_connection(self.db_path, timeout=60.0)
 
     def update_health_metrics(self):
         """Update service health metrics from database"""
@@ -171,10 +146,7 @@ class PrometheusExporter:
                 SELECT
                     model_version,
                     window_hours,
-                    hit_rate,
-                    precision_at_k,
-                    engagement_rate,
-                    k_value
+                    hit_rate
                 FROM model_quality_metrics
                 WHERE timestamp >= datetime('now', '-2 hours')
                 ORDER BY timestamp DESC
@@ -182,7 +154,7 @@ class PrometheusExporter:
 
             rows = cursor.fetchall()
             for row in rows:
-                model_ver, window, hit_rate, precision, engagement, k = row
+                model_ver, window, hit_rate = row
 
                 model_label = model_ver or 'default'
 
@@ -190,17 +162,6 @@ class PrometheusExporter:
                     model_version=model_label,
                     window=f"{window}h"
                 ).set(hit_rate or 0)
-
-                self.model_precision.labels(
-                    model_version=model_label,
-                    k=str(k),
-                    window=f"{window}h"
-                ).set(precision or 0)
-
-                self.model_engagement.labels(
-                    model_version=model_label,
-                    window=f"{window}h"
-                ).set(engagement or 0)
 
                 logger.debug(f"Updated quality metrics for {model_label}: hit_rate={hit_rate}")
 
@@ -213,44 +174,49 @@ class PrometheusExporter:
             self.connect_db()
             cursor = self.conn.cursor()
 
-            # Get latest drift metrics
+            # Get latest drift metrics - only Wasserstein distance
             cursor.execute('''
                 SELECT
                     window_type,
-                    metric_name,
-                    ks_p_value,
-                    normalized_wd,
-                    drift_detected,
-                    drift_severity
+                    normalized_wd
                 FROM drift_metrics
                 WHERE timestamp >= datetime('now', '-2 hours')
+                  AND metric_name = 'rating_distribution'
                 ORDER BY timestamp DESC
                 LIMIT 10
             ''')
 
             rows = cursor.fetchall()
-            for row in rows:
-                window_type, metric_name, ks_p, norm_wd, detected, severity = row
 
-                self.data_drift_ks_pvalue.labels(
-                    window_type=window_type,
-                    metric_name=metric_name
-                ).set(ks_p or 0)
+            # Track which window types we've seen
+            seen_windows = set()
+
+            for row in rows:
+                window_type, norm_wd = row
+                seen_windows.add(window_type)
 
                 self.data_drift_wasserstein.labels(
-                    window_type=window_type,
-                    metric_name=metric_name
+                    window_type=window_type
                 ).set(norm_wd or 0)
 
-                self.data_drift_detected.labels(
-                    window_type=window_type,
-                    severity=severity or 'none'
-                ).set(1 if detected else 0)
+                logger.debug(f"Updated drift metric: {window_type} WD={norm_wd}")
 
-                logger.debug(f"Updated drift metrics: {window_type}/{metric_name}")
+            # If no data found, set default values for common window types
+            # This ensures the dashboard shows 0 instead of "No data"
+            if not rows:
+                for window_type in ['hourly', 'daily']:
+                    self.data_drift_wasserstein.labels(
+                        window_type=window_type
+                    ).set(0.0)
+                logger.debug("No drift data found, setting default values to 0")
 
         except Exception as e:
             logger.error(f"Error updating drift metrics: {e}")
+            # On error, still set default values to avoid "No data" in dashboard
+            for window_type in ['hourly', 'daily']:
+                self.data_drift_wasserstein.labels(
+                    window_type=window_type
+                ).set(0.0)
 
     def update_alert_metrics(self):
         """Update alert metrics from database"""

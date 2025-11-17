@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(python generate_traffic.py:*)",
+      "Bash(sqlite3:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(wsl --exec bash -c \"sudo apt-get update && sudo apt-get install -y sqlite3\")",
+      "Bash(wsl --exec bash -c \"sqlite3 --version\")",
+      "Bash(wsl --exec bash:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

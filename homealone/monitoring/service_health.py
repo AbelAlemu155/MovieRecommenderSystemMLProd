@@ -2,7 +2,6 @@
 Service Health Monitor - Tracks availability and health of the recommendation service
 Monitors recommendation data from the database populated by inference telemetry
 """
-import sqlite3
 import pandas as pd
 import os
 import time
@@ -10,6 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
+from db_utils import get_db_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,9 +38,8 @@ class ServiceHealthMonitor:
         self._create_tables()
 
     def _connect(self):
-        """Establish database connection"""
-        self.conn = sqlite3.connect(self.db_path, timeout=30)
-        self.conn.execute('PRAGMA journal_mode=WAL')
+        """Establish database connection with proper configuration"""
+        self.conn = get_db_connection(self.db_path, timeout=60.0)
         logger.info(f"Connected to database: {self.db_path}")
 
     def _create_tables(self):
