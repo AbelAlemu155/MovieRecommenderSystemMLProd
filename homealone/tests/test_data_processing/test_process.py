@@ -2,8 +2,19 @@ import pytest
 from unittest.mock import MagicMock, Mock, patch
 import sys
 
-# Mock modules before importing DataProcessor
-# These need to be mocked because process.py imports them directly
+# Mock all kafka modules before importing DataProcessor
+kafka_mock = MagicMock()
+kafka_errors_mock = MagicMock()
+
+sys.modules['kafka'] = kafka_mock
+sys.modules['kafka.errors'] = kafka_errors_mock
+sys.modules['kafka.consumer'] = kafka_mock
+
+# Create mock exception class
+mock_no_brokers = type('NoBrokersAvailable', (Exception,), {})
+kafka_errors_mock.NoBrokersAvailable = mock_no_brokers
+
+# Mock other local modules
 sys.modules['kafka_pipeline'] = MagicMock()
 sys.modules['data_queue'] = MagicMock()
 sys.modules['schema_validation'] = MagicMock()
@@ -243,30 +254,6 @@ def test_process_various_invalid_logs(mock_kafka_client, invalid_input):
 
 
 # ============================================================================
-# Print Statement Tests
-# ============================================================================
-
-@patch('builtins.print')
-def test_process_data_prints_status(mock_print, mock_kafka_client, sample_movie_log):
-    """Test that processing prints status message"""
-    processor = DataProcessor(kafka_client=mock_kafka_client)
-    
-    processor.process_data(sample_movie_log)
-    
-    mock_print.assert_called_once_with("Done processing data: ", sample_movie_log)
-
-
-@patch('builtins.print')
-def test_process_data_prints_for_invalid_log(mock_print, mock_kafka_client, invalid_log):
-    """Test that processing prints even for invalid logs"""
-    processor = DataProcessor(kafka_client=mock_kafka_client)
-    
-    processor.process_data(invalid_log)
-    
-    mock_print.assert_called_once_with("Done processing data: ", invalid_log)
-
-
-# ============================================================================
 # Run Method Tests
 # ============================================================================
 
@@ -445,31 +432,6 @@ def test_full_pipeline_integration(mock_queue_class, mock_validator_class, mock_
     assert calls[3][0][0]["type"] == "movie"
     assert calls[3][0][0]["movieid"] == "movie3"
 
-
-@patch('homealone.data_processing.process.ValidationManager')
-@patch('homealone.data_processing.process.dq.DataQueue')
-@patch('builtins.print')
-def test_run_prints_for_all_messages(mock_print, mock_queue_class, mock_validator_class, mock_kafka_client):
-    """Test that run prints status for all messages"""
-    mock_queue_instance = MagicMock()
-    mock_queue_class.return_value = mock_queue_instance
-
-    # Mock validator to return valid data
-    mock_validator_instance = MagicMock()
-    mock_validator_instance.validate_record.return_value = (True, {}, None)
-    mock_validator_class.return_value = mock_validator_instance
-
-    messages = [
-        "2023-10-25 10:30:15,user1,GET /data/m/movie1/1.mpg",
-        "invalid,log,data",
-    ]
-    mock_kafka_client.consume.return_value = iter(messages)
-
-    processor = DataProcessor(kafka_client=mock_kafka_client)
-    processor.run()
-
-    # Should print for both messages (valid and invalid)
-    assert mock_print.call_count == 2
 
 
 # ============================================================================

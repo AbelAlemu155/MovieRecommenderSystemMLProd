@@ -1,12 +1,29 @@
 import pytest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch, create_autospec
 import subprocess
+import sys
+
+# Mock external dependencies before importing kafka_pipeline
+psutil_mock = MagicMock()
+kafka_mock = MagicMock()
+
+sys.modules['psutil'] = psutil_mock
+sys.modules['kafka'] = kafka_mock
+sys.modules['kafka.consumer'] = kafka_mock
+sys.modules['kafka.consumer.fetcher'] = kafka_mock
+
+# Create mock KafkaConsumer class
+mock_kafka_consumer = MagicMock()
+kafka_mock.KafkaConsumer = mock_kafka_consumer
+
+# Now import after mocking
 from homealone.data_processing.kafka_pipeline import KafkaSSHClient
 
 
 # ============================================================================
 # Initialization Tests
 # ============================================================================
+
 
 def test_client_initializes_with_all_parameters():
     """Test KafkaSSHClient stores all initialization parameters"""
@@ -32,8 +49,9 @@ def test_client_initializes_without_password():
 # Tunnel Detection Tests
 # ============================================================================
 
+
 @patch('homealone.data_processing.kafka_pipeline.psutil.process_iter')
-def test_is_tunnel_running_detects_existing_tunnel(mock_process_iter, kafka_client_params):
+def test_is_tunnel_running_detects_existing_tunnel(mock_process_iter):
     """Test detection of running SSH tunnel"""
     mock_proc = MagicMock()
     mock_proc.info = {
@@ -44,37 +62,38 @@ def test_is_tunnel_running_detects_existing_tunnel(mock_process_iter, kafka_clie
     }
     mock_process_iter.return_value = [mock_proc]
 
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("testuser", "testhost.com", "pass", "9092", "9092")
     assert client._is_tunnel_running() is True
 
 
-
 @patch('homealone.data_processing.kafka_pipeline.psutil.process_iter')
-def test_is_tunnel_running_returns_false_when_no_tunnel(mock_process_iter, kafka_client_params):
+def test_is_tunnel_running_returns_false_when_no_tunnel(mock_process_iter):
     """Test returns False when no SSH tunnel exists"""
     mock_proc = MagicMock()
     mock_proc.info = {"cmdline": ["python", "script.py"]}
     mock_process_iter.return_value = [mock_proc]
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     assert client._is_tunnel_running() is False
 
 
 @patch('homealone.data_processing.kafka_pipeline.psutil.process_iter')
-def test_is_tunnel_running_handles_access_denied(mock_process_iter, kafka_client_params):
+def test_is_tunnel_running_handles_access_denied(mock_process_iter):
     """Test gracefully handles psutil.AccessDenied"""
-    import psutil
+    # Create mock AccessDenied exception
+    mock_access_denied = type('AccessDenied', (Exception,), {})
+    psutil_mock.AccessDenied = mock_access_denied
     
     mock_proc = MagicMock()
-    mock_proc.info.side_effect = psutil.AccessDenied()
+    mock_proc.info.side_effect = mock_access_denied()
     mock_process_iter.return_value = [mock_proc]
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     assert client._is_tunnel_running() is False
 
 
 @patch('homealone.data_processing.kafka_pipeline.psutil.process_iter')
-def test_is_tunnel_running_ignores_different_port(mock_process_iter, kafka_client_params):
+def test_is_tunnel_running_ignores_different_port(mock_process_iter):
     """Test ignores SSH tunnel on different port"""
     mock_proc = MagicMock()
     mock_proc.info = {
@@ -82,13 +101,14 @@ def test_is_tunnel_running_ignores_different_port(mock_process_iter, kafka_clien
     }
     mock_process_iter.return_value = [mock_proc]
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     assert client._is_tunnel_running() is False
 
 
 # ============================================================================
 # Tunnel Start Tests
 # ============================================================================
+
 
 @patch('homealone.data_processing.kafka_pipeline.subprocess.Popen')
 def test_start_tunnel_uses_sshpass_with_password(mock_popen):
@@ -128,13 +148,14 @@ def test_start_tunnel_uses_ssh_without_password(mock_popen):
 # Tunnel Orchestration Tests
 # ============================================================================
 
+
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient._start_tunnel')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient._is_tunnel_running')
-def test_ensure_tunnel_starts_when_not_running(mock_is_running, mock_start, kafka_client_params):
+def test_ensure_tunnel_starts_when_not_running(mock_is_running, mock_start):
     """Test tunnel starts when not already running"""
     mock_is_running.return_value = False
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     client.ensure_tunnel()
     
     mock_is_running.assert_called_once()
@@ -143,11 +164,11 @@ def test_ensure_tunnel_starts_when_not_running(mock_is_running, mock_start, kafk
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient._start_tunnel')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient._is_tunnel_running')
-def test_ensure_tunnel_skips_when_already_running(mock_is_running, mock_start, kafka_client_params):
+def test_ensure_tunnel_skips_when_already_running(mock_is_running, mock_start):
     """Test tunnel not started when already running"""
     mock_is_running.return_value = True
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     client.ensure_tunnel()
     
     mock_is_running.assert_called_once()
@@ -158,9 +179,10 @@ def test_ensure_tunnel_skips_when_already_running(mock_is_running, mock_start, k
 # Consume (Streaming) Tests
 # ============================================================================
 
+
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_yields_decoded_messages(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_yields_decoded_messages(mock_ensure, mock_consumer_class):
     """Test consume yields UTF-8 decoded messages"""
     mock_msg1 = MagicMock(value=b'msg1')
     mock_msg2 = MagicMock(value=b'msg2')
@@ -169,7 +191,7 @@ def test_consume_yields_decoded_messages(mock_ensure, mock_consumer_class, kafka
     mock_consumer.__iter__ = Mock(return_value=iter([mock_msg1, mock_msg2]))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     messages = list(client.consume(topic="test", group_id="group"))
     
     assert messages == ['msg1', 'msg2']
@@ -179,13 +201,13 @@ def test_consume_yields_decoded_messages(mock_ensure, mock_consumer_class, kafka
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_uses_default_parameters(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_uses_default_parameters(mock_ensure, mock_consumer_class):
     """Test consume uses correct defaults"""
     mock_consumer = MagicMock()
     mock_consumer.__iter__ = Mock(return_value=iter([]))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     list(client.consume())
     
     mock_consumer_class.assert_called_once_with(
@@ -199,13 +221,13 @@ def test_consume_uses_default_parameters(mock_ensure, mock_consumer_class, kafka
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_commits_and_closes_on_exception(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_commits_and_closes_on_exception(mock_ensure, mock_consumer_class):
     """Test consumer closes properly even when exception occurs"""
     mock_consumer = MagicMock()
     mock_consumer.__iter__ = Mock(side_effect=Exception("Error"))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     
     with pytest.raises(Exception, match="Error"):
         list(client.consume())
@@ -216,7 +238,7 @@ def test_consume_commits_and_closes_on_exception(mock_ensure, mock_consumer_clas
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_handles_utf8_characters(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_handles_utf8_characters(mock_ensure, mock_consumer_class):
     """Test UTF-8 special characters are decoded correctly"""
     mock_msg = MagicMock(value='ñoño'.encode('utf-8'))
     
@@ -224,7 +246,7 @@ def test_consume_handles_utf8_characters(mock_ensure, mock_consumer_class, kafka
     mock_consumer.__iter__ = Mock(return_value=iter([mock_msg]))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     messages = list(client.consume())
     
     assert messages == ['ñoño']
@@ -234,9 +256,10 @@ def test_consume_handles_utf8_characters(mock_ensure, mock_consumer_class, kafka
 # Consume Batch Tests
 # ============================================================================
 
+
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_batch_returns_exact_size(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_batch_returns_exact_size(mock_ensure, mock_consumer_class):
     """Test consume_batch returns exactly batch_size messages"""
     mock_msgs = [MagicMock(value=f'msg{i}'.encode()) for i in range(15)]
     
@@ -244,7 +267,7 @@ def test_consume_batch_returns_exact_size(mock_ensure, mock_consumer_class, kafk
     mock_consumer.__iter__ = Mock(return_value=iter(mock_msgs))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     messages = client.consume_batch(batch_size=10)
     
     assert len(messages) == 10
@@ -254,7 +277,7 @@ def test_consume_batch_returns_exact_size(mock_ensure, mock_consumer_class, kafk
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_batch_handles_fewer_messages(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_batch_handles_fewer_messages(mock_ensure, mock_consumer_class):
     """Test consume_batch when fewer messages available than requested"""
     mock_msgs = [MagicMock(value=f'msg{i}'.encode()) for i in range(5)]
     
@@ -262,7 +285,7 @@ def test_consume_batch_handles_fewer_messages(mock_ensure, mock_consumer_class, 
     mock_consumer.__iter__ = Mock(return_value=iter(mock_msgs))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     messages = client.consume_batch(batch_size=10)
     
     assert len(messages) == 5
@@ -270,13 +293,13 @@ def test_consume_batch_handles_fewer_messages(mock_ensure, mock_consumer_class, 
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_batch_sets_timeout(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_batch_sets_timeout(mock_ensure, mock_consumer_class):
     """Test consume_batch sets consumer_timeout_ms"""
     mock_consumer = MagicMock()
     mock_consumer.__iter__ = Mock(return_value=iter([]))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     client.consume_batch(batch_size=5)
     
     call_kwargs = mock_consumer_class.call_args[1]
@@ -285,13 +308,13 @@ def test_consume_batch_sets_timeout(mock_ensure, mock_consumer_class, kafka_clie
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.KafkaSSHClient.ensure_tunnel')
-def test_consume_batch_handles_exception_gracefully(mock_ensure, mock_consumer_class, kafka_client_params):
+def test_consume_batch_handles_exception_gracefully(mock_ensure, mock_consumer_class):
     """Test consume_batch returns empty list on exception"""
     mock_consumer = MagicMock()
     mock_consumer.__iter__ = Mock(side_effect=Exception("Error"))
     mock_consumer_class.return_value = mock_consumer
     
-    client = KafkaSSHClient(**kafka_client_params)
+    client = KafkaSSHClient("user", "host.com", "pass", "9092", "9092")
     messages = client.consume_batch()
     
     assert messages == []
@@ -301,6 +324,7 @@ def test_consume_batch_handles_exception_gracefully(mock_ensure, mock_consumer_c
 # ============================================================================
 # Close Tests
 # ============================================================================
+
 
 def test_close_terminates_ssh_process():
     """Test close terminates SSH process when present"""
@@ -327,6 +351,7 @@ def test_close_handles_no_ssh_process():
 # ============================================================================
 # Integration Tests
 # ============================================================================
+
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.subprocess.Popen')
@@ -358,9 +383,14 @@ def test_full_workflow_tunnel_consume_close(mock_process_iter, mock_popen, mock_
 
 @patch('homealone.data_processing.kafka_pipeline.KafkaConsumer')
 @patch('homealone.data_processing.kafka_pipeline.psutil.process_iter')
-def test_sequential_batch_consumption(mock_process_iter, mock_consumer_class, mock_running_ssh_tunnel):
+def test_sequential_batch_consumption(mock_process_iter, mock_consumer_class):
     """Test consuming multiple batches sequentially"""
-    mock_process_iter.return_value = mock_running_ssh_tunnel
+    # Mock running tunnel
+    mock_proc = MagicMock()
+    mock_proc.info = {
+        "cmdline": ["ssh", "-L", "9092:localhost:9092", "user@host.com", "-NT"]
+    }
+    mock_process_iter.return_value = [mock_proc]
     
     # Two separate batches
     mock_msgs1 = [MagicMock(value=f'b1_{i}'.encode()) for i in range(10)]
