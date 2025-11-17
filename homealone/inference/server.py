@@ -280,8 +280,8 @@ def recommend(user_id):
         predictions= model_svd.test(testset_for_user)
         print("svd used")
     else:
-        predictions= model_knn.test(testset_for_user)
-        print("knn used")
+        predictions= model_nmf.test(testset_for_user)
+        print("mf used")
 
 
 
