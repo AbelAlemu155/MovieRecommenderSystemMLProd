@@ -11,8 +11,8 @@ import random
 from telemetry import Telemetry
 import time
 
-from experimentation.map_users_to_group import map_user_to_group
-from experimentation.constants import *
+# from homealone.experimentation.map_users_to_group import map_user_to_group
+# from homealone.experimentation.constants import *
 # We load these ONCE at startup
 model_svd = None
 # model_knn = None

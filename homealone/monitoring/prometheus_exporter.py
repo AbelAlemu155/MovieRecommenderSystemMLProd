@@ -8,9 +8,9 @@ import logging
 import os
 from db_utils import get_db_connection
 
-from experimentation.measure_diff_in_conf import compute_confidence
+# from homealone.experimentation.measure_diff_in_conf import compute_confidence
 
-from homealone.evaluation.online_evaluation import compute_online_measure
+# from homealone.evaluation.online_evaluation import compute_online_measure
 
 logging.basicConfig(
     level=logging.INFO,
@@ -264,58 +264,7 @@ class PrometheusExporter:
         except Exception as e:
             logger.error(f"Error updating alert metrics: {e}")
     
-    def update_treatment_group_quality(self):
-        curr_measure= compute_online_measure(treatment_group=True)
-        query = "treatement_model_quality"
-        response_tr_quality = requests.get(f"http://localhost:{self.port}/api/v1/query_range", params={
-            "query": query,
-            "start": "2025-11-01T00:00:00Z",
-            # monthly data
-            "end": "2025-11-30T23:59:59Z",  
-            "step": "1h"  
-        }).json()
-
-        query = "control_model_quality"
-        response_co_quality = requests.get(f"http://localhost:{self.port}/api/v1/query_range", params={
-            "query": query,
-            "start": "2025-11-01T00:00:00Z",
-            # monthly data
-            "end": "2025-11-30T23:59:59Z",  
-            "step": "1h"  
-        }).json()
-
-        treatment_values = []
-        for series in response_tr_quality['data']['result']:
-            # range query: 'values', instant query: 'value'
-            if 'values' in series:
-                nums = [float(v[1]) for v in series['values']]
-            else:
-                nums = [float(series['value'][1])]
-            treatment_values.extend(nums)
-
-        # Control group
-        control_values = []
-        for series in response_co_quality['data']['result']:
-            if 'values' in series:
-                nums = [float(v[1]) for v in series['values']]
-            else:
-                nums = [float(series['value'][1])]
-            control_values.extend(nums)
-
-        confidence= compute_confidence(treatment_values=treatment_values, control_values=control_values)
-        #  how to compute confidence 
-        self.treatement_group_quality.labels(model_name= "Matrix Factorization"
-                                             , confidence=  confidence
-                                             ).set(curr_measure)
-        return confidence
-
-    def update_control_group_quality(self, confidence):
-        curr_measure= compute_online_measure(treatment_group=False)
-        self.control_group_quality.labels(model_name= "Main model"
-                                             , confidence=  confidence
-                                             ).set(curr_measure)
-        
-
+   
 
     def update_all_metrics(self):
         """Update all metrics"""
@@ -325,8 +274,8 @@ class PrometheusExporter:
         self.update_quality_metrics()
         self.update_drift_metrics()
         self.update_alert_metrics()
-        conf=self.update_treatment_group_quality()
-        self.update_control_group_quality(confidence=conf)
+        # conf=self.update_treatment_group_quality()
+        # self.update_control_group_quality(confidence=conf)
 
         logger.info("All Prometheus metrics updated")
 
