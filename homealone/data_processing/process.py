@@ -90,7 +90,7 @@ class DataProcessor:
                 "recommendations": recommendations,
                 "responsetime": float(responsetime_str)
             }
-        print("Done processing data: ", data)
+        # print("Done processing data: ", data)
         return processed_data
 
     def validate_data(self, data):
@@ -112,10 +112,11 @@ class DataProcessor:
 
         is_valid, validated_data, error_msg = self.validator.validate_record(data, schema)
         if not is_valid:
-            logger.error(f"Validation errors for data {data}: {error_msg}")
+            logger.info(f"Validation errors for data {data}: {error_msg}")
         else:
-            logger.info(
-                f"Data validated successfully: {data}, for event type: {data_type}")
+            pass
+            # logger.info(
+                # f"Data validated successfully: {data}, for event type: {data_type}")
         return is_valid
 
     def get_validation_stats(self):

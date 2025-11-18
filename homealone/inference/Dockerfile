@@ -15,6 +15,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # Copy the inference script to the working directory
+COPY load_balancer.py ./load_balancer.py
 COPY server.py ./server.py
 COPY telemetry.py ./telemetry.py
 

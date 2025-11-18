@@ -3,29 +3,113 @@ services:
     build:
       context: homealone/training
       dockerfile: Dockerfile
+      args:
+        - GIT_COMMIT=${GIT_COMMIT:-unknown}
     volumes:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
 
-  inference:
+  inference-1:
     build:
       context: homealone/inference
       dockerfile: Dockerfile
+    command: python server.py
     volumes:
       - ./homealone/models:/app/models
       - ./homealone/db:/app/db
-    ports:
-      - "8082:8082"
+    ports: 
+      - "5011:5000"
     depends_on:
       - training
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    environment:
+      - REPLICA_ID=1
+      - PORT=5000
+
+  inference-2:
+    build:
+      context: homealone/inference
+      dockerfile: Dockerfile
+    command: python server.py
+    volumes:
+      - ./homealone/models:/app/models
+      - ./homealone/db:/app/db
+    ports: 
+      - "5012:5000"
+    depends_on:
+      - training
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    environment:
+      - REPLICA_ID=2
+      - PORT=5000
+
+  inference-3:
+    build:
+      context: homealone/inference
+      dockerfile: Dockerfile
+    command: python server.py
+    volumes:
+      - ./homealone/models:/app/models
+      - ./homealone/db:/app/db
+    ports: 
+      - "5013:5000"
+    depends_on:
+      - training
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    environment:
+      - REPLICA_ID=3
+      - PORT=5000
+
+  load-balancer:
+    build:
+      context: homealone/inference
+      dockerfile: Dockerfile
+    command: python load_balancer.py
+    ports:
+      - "8082:8082"
+    depends_on:
+      - inference-1
+      - inference-2
+      - inference-3
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    environment:
+      - INFERENCE_SERVERS=http://inference-1:5000,http://inference-2:5000,http://inference-3:5000
 
   kafka_processor:
     build:
       context: homealone/data_processing
       dockerfile: Dockerfile
-    command: python /app/data_processing/process.py
+    command: python /app/process.py
     environment:
       - TUNNEL_USER=${TUNNEL_USER}
       - TUNNEL_IP=${TUNNEL_IP}
@@ -35,12 +119,17 @@ services:
       - ./homealone/db:/app/db
       - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   db_writer:
     build:
       context: homealone/data_processing
       dockerfile: Dockerfile
-    command: python /app/data_processing/db_writer.py
+    command: python /app/db_writer.py
     volumes:
       - ./homealone/db:/app/db
       - ./homealone/data_processing/data_queues:/app/data_queues
@@ -48,13 +137,18 @@ services:
     depends_on:
       kafka_processor:
         condition: service_started
+        logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   monitoring:
     build:
       context: homealone/monitoring
       dockerfile: Dockerfile
     environment:
-      - TEST_MODE=false
+      - TEST_MODE=true
       - TUNNEL_USER=${TUNNEL_USER}
       - TUNNEL_IP=${TUNNEL_IP}
       - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
@@ -67,6 +161,31 @@ services:
     restart: on-failure
     depends_on:
       - db_writer
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts *
+      --backend-store-uri sqlite:///app/db/mlflow.db
+      --default-artifact-root /app/db/mlflow_artifacts
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+    volumes:
+      - ./homealone/db:/app/db
       - inference
 
   prometheus:
