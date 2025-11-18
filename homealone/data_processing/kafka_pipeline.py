@@ -55,7 +55,7 @@ class KafkaSSHClient:
         else:
             print("SSH tunnel already running.")
 
-    def consume(self, topic="movielog10", group_id=GROUP_ID, auto_offset_reset="latest"):
+    def consume(self, topic="movielog10", group_id=GROUP_ID, auto_offset_reset="earliest"):
         """
         Consume messages from a Kafka topic with manual offset control.
         
@@ -87,7 +87,7 @@ class KafkaSSHClient:
             consumer.commit()
             consumer.close()
 
-    def consume_batch(self, topic="movielog10", group_id=GROUP_ID, batch_size=10, auto_offset_reset="latest"):
+    def consume_batch(self, topic="movielog10", group_id=GROUP_ID, batch_size=10, auto_offset_reset="earliest"):
         """
         Consume a specific number of messages and commit offset.
         
