@@ -77,6 +77,7 @@ def proxy(path):
         resp = requests.request(
             method=request.method,
             url=url,
+            params=request.args,
             headers={k: v for k, v in request.headers if k != 'Host'},
             data=request.get_data(),
             cookies=request.cookies,
