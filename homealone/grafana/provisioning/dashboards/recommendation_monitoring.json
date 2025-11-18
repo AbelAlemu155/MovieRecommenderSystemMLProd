@@ -70,11 +70,11 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "recommendation_service_availability_percentage{window=\"60m\"}",
+          "expr": "recommendation_service_availability_percentage",
           "refId": "A"
         }
       ],
-      "title": "Service Availability (1h)",
+      "title": "Service Availability",
       "type": "gauge"
     },
     {
@@ -94,7 +94,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 10,
             "gradientMode": "none",
             "hideFrom": {
               "tooltip": false,
@@ -102,7 +102,7 @@
               "legend": false
             },
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -127,7 +127,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "reqps"
         }
       },
       "gridPos": {
@@ -139,7 +139,7 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["mean", "last"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -155,8 +155,8 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(recommendation_response_time_ms_bucket[5m])) by (le))",
-          "legendFormat": "P95",
+          "expr": "rate(recommendation_requests_total[5m])",
+          "legendFormat": "Total Requests",
           "refId": "A"
         },
         {
@@ -164,12 +164,12 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "histogram_quantile(0.99, sum(rate(recommendation_response_time_ms_bucket[5m])) by (le))",
-          "legendFormat": "P99",
+          "expr": "rate(successful_recommendation_requests_total[5m])",
+          "legendFormat": "Successful Requests",
           "refId": "B"
         }
       ],
-      "title": "Response Time (P95, P99)",
+      "title": "Request Rate",
       "type": "timeseries"
     },
     {
@@ -180,50 +180,9 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "Wasserstein Distance",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "line"
-            }
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "green",
-                  "index": 0,
-                  "text": "No Drift"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -233,49 +192,113 @@
               },
               {
                 "color": "yellow",
-                "value": 0.1
+                "value": 1000
               },
               {
                 "color": "red",
-                "value": 0.15
+                "value": 10000
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         }
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
+        "h": 5,
+        "w": 6,
         "x": 0,
         "y": 9
       },
-      "id": 4,
+      "id": 3,
       "options": {
-        "legend": {
-          "calcs": ["mean", "lastNotNull"],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "auto"
       },
+      "pluginVersion": "10.0.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "recommendation_data_drift_wasserstein_normalized or on() vector(0)",
-          "legendFormat": "{{window_type}}",
+          "expr": "recommendation_requests_total",
           "refId": "A"
         }
       ],
-      "title": "Data Drift (Wasserstein Distance)",
-      "type": "timeseries"
+      "title": "Total Requests",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 9
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-datasource"
+          },
+          "expr": "successful_recommendation_requests_total",
+          "refId": "A"
+        }
+      ],
+      "title": "Successful Requests (200)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -290,7 +313,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "Hit Rate (%)",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -318,7 +341,7 @@
             }
           },
           "mappings": [],
-          "max": 1,
+          "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
@@ -329,15 +352,15 @@
               },
               {
                 "color": "yellow",
-                "value": 0.3
+                "value": 90
               },
               {
                 "color": "green",
-                "value": 0.5
+                "value": 95
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "percent"
         }
       },
       "gridPos": {
@@ -365,12 +388,12 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "recommendation_model_hit_rate",
-          "legendFormat": "{{model_version}} ({{window}})",
+          "expr": "recommendation_service_availability_percentage",
+          "legendFormat": "Availability %",
           "refId": "A"
         }
       ],
-      "title": "Model Performance (Hit Rate by Version)",
+      "title": "Service Availability Over Time",
       "type": "timeseries"
     }
   ],
