@@ -137,7 +137,7 @@ services:
     depends_on:
       kafka_processor:
         condition: service_started
-        logging:
+    logging:
       driver: "json-file"
       options:
         max-size: "25m"
@@ -170,7 +170,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
-      - "5000:5000"
+      - "5015:5000"
     command: >
       mlflow server
       --host 0.0.0.0
@@ -186,7 +186,6 @@ services:
         max-file: "3"
     volumes:
       - ./homealone/db:/app/db
-      - inference
 
   prometheus:
     image: prom/prometheus:latest
@@ -216,6 +215,23 @@ services:
     restart: on-failure
     depends_on:
       - prometheus
+    
+  model-quality:
+    build:
+      context: homealone
+      dockerfile: monitoring/Dockerfile.model_quality
+    environment:
+      - TEST_MODE=true
+    volumes:
+      - ./homealone/db:/app/db
+    restart: on-failure
+    depends_on:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
 volumes:
   grafana-data:
