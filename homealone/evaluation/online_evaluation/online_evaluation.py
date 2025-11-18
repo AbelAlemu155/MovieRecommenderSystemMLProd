@@ -4,16 +4,24 @@
 # expects a pandas data frames
 #  recommendation history: movie_id, and u_id recommended movies
 # watch_history: u_id, movie_id, watch_time, and movie duration
-#  rating history: u_id, movie_id , rating 
+#  rating history: u_id, movie_id , rating
 
-from homealone.evaluation.online_evaluation.snapshot_data import *
+import logging
+from online_evaluation.snapshot_data import *
 import pandas as pd
 
-def compute_online_measure(treatment_group=None):
-   
-    recommendations_df, watch_rating_df = get_snapshot(treatment_group=treatment_group)
-    df = preprocess_snapshot(recommendations_df=recommendations_df, 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def compute_online_measure():
+    logger.info("Starting online measure computation")
+
+    recommendations_df, watch_rating_df = get_snapshot()
+    logger.info(f"Retrieved {len(recommendations_df)} recommendations and {len(watch_rating_df)} watch/rating records")
+
+    df = preprocess_snapshot(recommendations_df=recommendations_df,
                              watch_rating_df=watch_rating_df)
+    logger.info(f"Preprocessed data: {len(df)} total records")
     df['recommended_successful'] = df.apply(
     lambda row: (
         pd.notnull(row['rating']) and 
@@ -30,12 +38,12 @@ def compute_online_measure(treatment_group=None):
     ),
     axis=1
     )
-
-    
-
     success_proportion = df['recommended_successful'].mean()
-    print(f"Proportion of good recommendations: {success_proportion}")
-    print(df[df['recommended_successful']==True])
+    successful_count = df['recommended_successful'].sum()
+
+    logger.info(f"Success proportion: {success_proportion:.4f} ({successful_count}/{len(df)} recommendations)")
+    logger.info(f"Successful recommendations:\n{df[df['recommended_successful']==True]}")
+
     return success_proportion
 
 

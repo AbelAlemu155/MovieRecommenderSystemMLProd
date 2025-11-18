@@ -137,6 +137,11 @@ services:
     depends_on:
       kafka_processor:
         condition: service_started
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   monitoring:
     build:
@@ -144,6 +149,10 @@ services:
       dockerfile: Dockerfile
     environment:
       - TEST_MODE=true
+      - TUNNEL_USER=${TUNNEL_USER}
+      - TUNNEL_IP=${TUNNEL_IP}
+      - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
+      - TUNNEL_PORT=${TUNNEL_PORT}
     volumes:
       - ./homealone/db:/app/db
       - ./homealone/reports:/app/reports
@@ -161,7 +170,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
-      - "5000:5000"
+      - "5015:5000"
     command: >
       mlflow server
       --host 0.0.0.0
@@ -177,3 +186,53 @@ services:
         max-file: "3"
     volumes:
       - ./homealone/db:/app/db
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: on-failure
+    depends_on:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./homealone/grafana/provisioning:/etc/grafana/provisioning
+    restart: on-failure
+    depends_on:
+      - prometheus
+    
+  model-quality:
+    build:
+      context: homealone
+      dockerfile: monitoring/Dockerfile.model_quality
+    environment:
+      - TEST_MODE=true
+    volumes:
+      - ./homealone/db:/app/db
+    restart: on-failure
+    depends_on:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+volumes:
+  grafana-data:
+  prometheus-data:

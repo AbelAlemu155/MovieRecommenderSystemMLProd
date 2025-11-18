@@ -10,7 +10,9 @@ def get_snapshot(treatment_group=None):
     query = """
      select * from recommendations ;
     """
-    db_path = os.path.join(os.getcwd(), "homealone/db/home_alone.db")
+    # Use environment variable or default to docker path
+    db_dir = os.getenv("DB_PATH", "/app/db")
+    db_path = os.path.join(db_dir, "home_alone.db")
 
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)

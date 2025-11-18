@@ -1,0 +1,23 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY monitoring/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy online evaluation module
+COPY evaluation/online_evaluation/ /app/online_evaluation/
+
+# Copy model quality script
+COPY monitoring/model_quality.py .
+
+# Shared volumes for database and reports
+VOLUME ["/app/db", "/app/reports"]
+
+CMD ["python", "model_quality.py"]

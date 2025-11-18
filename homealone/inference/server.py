@@ -413,6 +413,12 @@ def recommend(user_id):
     # Get top 20
     recommendation_response = get_top_n(svd_predictions, n=20)
     response_time_ms = (time.time() - start_time) * 1000
+
+    # Log telemetry
+    elapsed = time.time() - start_time
+    logging.info(f"Generated recommendations in {elapsed*1000:.0f}ms")
+    
+
     telemetry.log('recommendation', {
         'user_id': raw_user_id,
         'recommended_items': recommendation_response,
