@@ -4,3 +4,4 @@ sqlalchemy
 pandas
 flask
 watchdog==3.0.0
+requests

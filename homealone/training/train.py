@@ -8,9 +8,10 @@ import pickle
 import time
 import logging
 from datetime import datetime, timedelta
-import subprocess
 import hashlib
 import json
+import requests
+import time
 
 
 from data_provenance import DataProvenance
@@ -20,6 +21,77 @@ from model_provenance import ModelProvenance
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def trigger_rolling_model_reload():
+    """
+    Trigger rolling model reload across all inference replicas.
+    Ensures zero-downtime deployment by reloading one server at a time.
+    """
+    servers = [
+        'http://inference-1:5000',
+        'http://inference-2:5000',
+        'http://inference-3:5000'
+    ]
+    
+    logger.info("=" * 60)
+    logger.info("Starting rolling model reload (zero-downtime deployment)")
+    logger.info("=" * 60)
+    
+    # Reload one server at a time
+    for i, server in enumerate(servers, 1):
+        logger.info(f"[{i}/{len(servers)}] Reloading {server}...")
+        
+        try:
+            # Trigger reload
+            resp = requests.post(f"{server}/reload_models", timeout=60)
+            
+            if resp.status_code == 200:
+                logger.info(f"{server} reload initiated")
+                
+                # Wait for server to become healthy again
+                if wait_for_healthy(server, timeout=90):
+                    logger.info(f"{server} is healthy with new models")
+                else:
+                    logger.error(f"{server} failed health check after reload")
+                    return False
+            else:
+                logger.error(f"{server} reload failed: {resp.status_code}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"{server} unreachable: {e}")
+            return False
+        
+        # Brief pause between servers (for safety)
+        if i < len(servers):
+            logger.info(f"Waiting 5 seconds before next server...")
+            time.sleep(5)
+    
+    logger.info("=" * 60)
+    logger.info("All servers reloaded successfully - Zero downtime deployment complete!")
+    logger.info("=" * 60)
+    return True
+
+
+def wait_for_healthy(server, timeout=90, interval=2):
+    """
+    Wait for server to respond to health checks with 'ready' status.
+    """
+    logger.info(f"Waiting for {server} to become healthy...")
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        try:
+            resp = requests.get(f"{server}/health", timeout=3)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('status') == 'ready':
+                    return True
+        except:
+            pass
+        
+        time.sleep(interval)
+    
+    return False
 
 
 class Training:
@@ -34,7 +106,7 @@ class Training:
         # Evaluation configuration - percentage-based
         self.test_percentage = 0.30
         self.training_cutoff = None
-        self.periodic_training_interval = 60 * 60 * 1  # secs * mins * N hours in seconds
+        self.periodic_training_interval = 60 * 60 * 6  # secs * mins * N hours in seconds
         self.last_training_time = None
 
 
@@ -522,8 +594,6 @@ if __name__ == "__main__":
 
         
         logger.info("Model versioning...")
-        
-        
         try:
             # Log to MLflow
             trainer.model_prov.log_artifact(svd_path, artifact_path="models")
@@ -572,6 +642,13 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Failed to version models: {e}")
 
+        logger.info("Triggering model reload on inference servers...")
+        reload_success = trigger_rolling_model_reload()
+
+        if reload_success:
+            logger.info("Models deployed to all replicas successfully")
+        else:
+            logger.error("Model deployment failed on some replicas")
         
         
         evaluation_results = {}
