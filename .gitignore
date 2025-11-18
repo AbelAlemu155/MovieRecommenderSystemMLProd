@@ -198,8 +198,22 @@ Thumbs.db
 # -------------------------
 
 homealone/db/home_alone.db
+homealone/db/mlflow.db
 homealone/db/
 homealone/data_processing/data_queues/
 homealone/data_processing/output/
 homealone/data_processing/cache/
 homealone/reports/
+homealone/models/provenance_manifest.json
+!homealone/models/*.dvc
+
+# -------------------------
+# DVC - Data Version Control
+# -------------------------
+/homealone/db/dvc_data/raw/*.parquet
+/homealone/db/dvc_data/splits/*.parquet
+/homealone/db/.dvc/cache
+/.dvc/cache
+/.dvc/tmp
+/.dvc/plots
+/.dvc/config.local

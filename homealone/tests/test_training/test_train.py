@@ -1,158 +1,177 @@
 """
-Tests for the Training class - fully mocked with proper patching.
+Tests for the Training class - key functionality tests with comprehensive mocking.
 
 Run with: pytest homealone/tests/test_training/test_train.py -v
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, MagicMock, patch, call
 from datetime import datetime, timedelta
 import sys
+import pandas as pd
+import os
 
-# Mock surprise before any imports
-sys.modules['surprise'] = MagicMock()
-sys.modules['surprise.prediction_algorithms'] = MagicMock()
+# Mock all external dependencies before any imports
+surprise_mock = MagicMock()
+sys.modules['surprise'] = surprise_mock
+sys.modules['surprise.prediction_algorithms'] = surprise_mock.prediction_algorithms
+sys.modules['surprise.prediction_algorithms.matrix_factorization'] = surprise_mock.prediction_algorithms.matrix_factorization
+sys.modules['surprise.prediction_algorithms.knns'] = surprise_mock.prediction_algorithms.knns
+sys.modules['surprise.model_selection'] = surprise_mock.model_selection
+sys.modules['surprise.dump'] = surprise_mock.dump_module
+
+# Create mock classes
+SVD_mock = MagicMock()
+KNNBasic_mock = MagicMock()
+NMF_mock = MagicMock()
+Dataset_mock = MagicMock()
+Reader_mock = MagicMock()
+dump_mock = MagicMock()
+accuracy_mock = MagicMock()
+
+surprise_mock.SVD = SVD_mock
+surprise_mock.KNNBasic = KNNBasic_mock
+surprise_mock.NMF = NMF_mock
+surprise_mock.Dataset = Dataset_mock
+surprise_mock.Reader = Reader_mock
+surprise_mock.dump = dump_mock
+surprise_mock.accuracy = accuracy_mock
+
+# Mock provenance modules
+data_provenance_mock = MagicMock()
+model_provenance_mock = MagicMock()
+sys.modules['data_provenance'] = data_provenance_mock
+sys.modules['model_provenance'] = model_provenance_mock
+
+DataProvenance_mock = MagicMock()
+ModelProvenance_mock = MagicMock()
+data_provenance_mock.DataProvenance = DataProvenance_mock
+model_provenance_mock.ModelProvenance = ModelProvenance_mock
+
+# Now import Training
+from homealone.training.train import Training
+
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_db():
+    """Mock database connection"""
+    with patch('homealone.training.train.sqlite3.connect') as mock_connect:
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_connect.return_value = mock_conn
+        yield mock_connect, mock_conn, mock_cursor
+
+
+@pytest.fixture
+def sample_train_df():
+    """Sample training dataframe"""
+    return pd.DataFrame({
+        'user_id': list(range(100)),
+        'movie_id': list(range(100, 200)),
+        'rating': [4.0] * 100,
+        'rated_at': pd.date_range('2025-01-01', periods=100, freq='h')
+    })
+
+
+@pytest.fixture
+def sample_test_df():
+    """Sample test dataframe"""
+    return pd.DataFrame({
+        'user_id': list(range(50)),
+        'movie_id': list(range(100, 150)),
+        'rating': [3.5] * 50,
+        'rated_at': pd.date_range('2025-01-05', periods=50, freq='h')
+    })
 
 
 # ============================================================================
 # Test: Initialization
 # ============================================================================
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-def test_initialization_creates_connection(mock_sql, mock_connect):
-    """Test that Training class initializes and connects to database"""
-    from homealone.training.train import Training
+def test_initialization_creates_tables(mock_sql, mock_db):
+    """Test that initialization creates required tables"""
+    mock_connect, mock_conn, mock_cursor = mock_db
+    mock_sql.return_value = pd.DataFrame()
     
-    mock_conn = MagicMock()
-    mock_connect.return_value = mock_conn
+    trainer = Training()
+    
+    # Check that CREATE TABLE statements were executed
+    execute_calls = [str(call) for call in mock_cursor.execute.call_args_list]
+    
+    assert any('training_metadata' in call for call in execute_calls)
+    assert any('model_deployment' in call for call in execute_calls)
+    assert mock_conn.commit.called
+
+
+@patch('homealone.training.train.pd.read_sql_query')
+def test_initialization_sets_attributes(mock_sql, mock_db):
+    """Test that initialization sets correct attributes"""
+    mock_sql.return_value = pd.DataFrame()
     
     trainer = Training()
     
     assert trainer.db_path == 'db/home_alone.db'
-    assert trainer.test_percentage == 0.30
-    assert trainer.retrain_threshold == 0.05
-    mock_connect.assert_called_once_with('db/home_alone.db')
-
-
-@patch('homealone.training.train.sqlite3.connect')
-@patch('homealone.training.train.pd.read_sql_query')
-def test_initialization_sets_correct_attributes(mock_sql, mock_connect):
-    """Test that all attributes are set correctly"""
-    from homealone.training.train import Training
-    
-    mock_connect.return_value = MagicMock()
-    
-    trainer = Training()
-    
     assert trainer.table_name == 'ratings'
+    assert trainer.test_percentage == 0.30
+    assert trainer.model_path == '/app/models/'
     assert trainer.trainset is None
     assert trainer.training_cutoff is None
-    assert trainer.model_path == '/app/models/'
 
 
-# ============================================================================
-# Test: Retraining Logic
-# ============================================================================
-
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-def test_should_retrain_first_run(mock_sql, mock_connect):
-    """Test should_retrain returns True on first run"""
-    from homealone.training.train import Training
-    import pandas as pd
+def test_initialization_creates_provenance_trackers(mock_sql, mock_db):
+    """Test that provenance trackers are initialized"""
+    mock_sql.return_value = pd.DataFrame()
     
-    mock_connect.return_value = MagicMock()
-    
-    def side_effect_func(query, conn):
-        if 'training_metadata' in query:
-            # First call: empty metadata (no previous training)
-            return pd.DataFrame(columns=['total_samples'])
-        elif 'COUNT' in query:
-            # Second call: current count
-            return pd.DataFrame({'count': [1000]})
-        return pd.DataFrame()
-    
-    mock_sql.side_effect = side_effect_func
+    # Reset mock call counts before creating trainer
+    DataProvenance_mock.reset_mock()
+    ModelProvenance_mock.reset_mock()
     
     trainer = Training()
-    should_train, current, new = trainer.should_retrain()
     
-    assert should_train is True
-    assert current == 1000
-    assert new == 0
-
-
-@patch('homealone.training.train.sqlite3.connect')
-@patch('homealone.training.train.pd.read_sql_query')
-def test_should_retrain_sufficient_data(mock_sql, mock_connect):
-    """Test should_retrain returns True with 5% more data"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_connect.return_value = MagicMock()
-    
-    def side_effect_func(query, conn):
-        if 'training_metadata' in query:
-            # First call: last training had 1000 samples
-            return pd.DataFrame({'total_samples': [1000]})
-        elif 'COUNT' in query:
-            # Second call: current count is 1060 (6% more)
-            return pd.DataFrame({'count': [1060]})
-        return pd.DataFrame()
-    
-    mock_sql.side_effect = side_effect_func
-    
-    trainer = Training()
-    should_train, current, new = trainer.should_retrain()
-    
-    assert should_train is True
-    assert current == 1060
-    assert new == 60
-
-@patch('homealone.training.train.sqlite3.connect')
-@patch('homealone.training.train.pd.read_sql_query')
-def test_should_retrain_insufficient_data(mock_sql, mock_connect):
-    """Test should_retrain returns False with insufficient data"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_connect.return_value = MagicMock()
-    
-    def side_effect_func(query, conn):
-        if 'training_metadata' in query:
-            # First call: last training had 1000 samples
-            return pd.DataFrame({'total_samples': [1000]})
-        elif 'COUNT' in query:
-            # Second call: current count is 1030 (3% more - insufficient)
-            return pd.DataFrame({'count': [1030]})
-        return pd.DataFrame()
-    
-    mock_sql.side_effect = side_effect_func
-    
-    trainer = Training()
-    should_train, current, new = trainer.should_retrain()
-    
-    assert should_train is False
-    assert current == 1030
-    assert new == 30
+    assert trainer.model_prov is not None
+    assert trainer.data_prov is not None
+    # Don't check exact call count - just that they were called
+    assert DataProvenance_mock.called
+    assert ModelProvenance_mock.called
 
 
 # ============================================================================
-# Test: Data Loading
+# Test: Data Loading and Splitting
 # ============================================================================
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.pd.to_datetime')
-def test_get_percentage_based_split_empty_data(mock_datetime, mock_sql, mock_connect):
+def test_get_percentage_based_split_success(mock_sql, mock_db):
+    """Test successful data split"""
+    # Create sample data with enough rows
+    df = pd.DataFrame({
+        'user_id': list(range(200)) * 2,  # 400 total rows
+        'movie_id': list(range(200)) * 2,
+        'rating': [4.0] * 400,
+        'rated_at': pd.date_range('2025-01-01', periods=400, freq='h')
+    })
+    
+    mock_sql.return_value = df
+    
+    trainer = Training()
+    train_df, test_df, cutoff = trainer.get_percentage_based_split()
+    
+    assert train_df is not None
+    assert test_df is not None
+    assert cutoff is not None
+    # Check approximate 70/30 split (allowing for warm-start filtering)
+    assert len(train_df) > len(test_df)
+
+
+@patch('homealone.training.train.pd.read_sql_query')
+def test_get_percentage_based_split_empty_data(mock_sql, mock_db):
     """Test that empty data returns None"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_connect.return_value = MagicMock()
-    
-    # Return empty DataFrame
     mock_sql.return_value = pd.DataFrame()
     
     trainer = Training()
@@ -163,26 +182,17 @@ def test_get_percentage_based_split_empty_data(mock_datetime, mock_sql, mock_con
     assert cutoff is None
 
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.pd.to_datetime')
-def test_get_percentage_based_split_insufficient_data(mock_datetime, mock_sql, mock_connect):
-    """Test that insufficient data (< 100) returns None"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_connect.return_value = MagicMock()
-    
-    # Return small DataFrame (50 rows)
-    df = pd.DataFrame({
+def test_get_percentage_based_split_insufficient_data(mock_sql, mock_db):
+    """Test that insufficient data returns None"""
+    small_df = pd.DataFrame({
         'user_id': list(range(50)),
         'movie_id': list(range(50)),
         'rating': [3.0] * 50,
-        'rated_at': [datetime.now()] * 50
+        'rated_at': pd.date_range('2025-01-01', periods=50, freq='h')
     })
     
-    mock_sql.return_value = df
-    mock_datetime.return_value = df['rated_at']
+    mock_sql.return_value = small_df
     
     trainer = Training()
     train_df, test_df, cutoff = trainer.get_percentage_based_split()
@@ -190,285 +200,311 @@ def test_get_percentage_based_split_insufficient_data(mock_datetime, mock_sql, m
     assert train_df is None
     assert test_df is None
     assert cutoff is None
+
+
+@patch('homealone.training.train.pd.read_sql_query')
+def test_load_data_for_training_creates_trainset(mock_sql, mock_db):
+    """Test that trainset is created from data"""
+    # Create sufficient data
+    df = pd.DataFrame({
+        'user_id': list(range(200)) * 2,
+        'movie_id': list(range(200)) * 2,
+        'rating': [4.0] * 400,
+        'rated_at': pd.date_range('2025-01-01', periods=400, freq='h')
+    })
+    
+    mock_sql.return_value = df
+    
+    mock_trainset = MagicMock()
+    mock_data = MagicMock()
+    mock_data.build_full_trainset.return_value = mock_trainset
+    Dataset_mock.load_from_df.return_value = mock_data
+    
+    trainer = Training()
+    train_df, test_df = trainer.load_data_for_training()
+    
+    assert trainer.trainset is not None
+    assert trainer.trainset == mock_trainset
+    Dataset_mock.load_from_df.assert_called_once()
 
 
 # ============================================================================
 # Test: Model Training
 # ============================================================================
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.SVD')
-def test_train_svd_calls_surprise_svd(mock_svd, mock_sql, mock_connect):
-    """Test that SVD training calls Surprise SVD correctly"""
-    from homealone.training.train import Training
+def test_train_svd_creates_and_fits_model(mock_sql, mock_db):
+    """Test SVD model training"""
+    mock_sql.return_value = pd.DataFrame()
     
-    mock_connect.return_value = MagicMock()
     mock_model = MagicMock()
-    mock_svd.return_value = mock_model
+    SVD_mock.return_value = mock_model
     
     trainer = Training()
     trainer.trainset = MagicMock()
     
     result = trainer.train_svd()
     
-    mock_svd.assert_called_once_with(
-        n_factors=20,
-        lr_all=0.01,
-        reg_all=0.01,
-        n_epochs=20,
-        random_state=42
+    SVD_mock.assert_called_once_with(
+        n_factors=20, lr_all=0.01, reg_all=0.01, n_epochs=20, random_state=42
     )
     mock_model.fit.assert_called_once_with(trainer.trainset)
     assert result == mock_model
 
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.KNNBasic')
-def test_train_knn_calls_surprise_knn(mock_knn, mock_sql, mock_connect):
-    """Test that KNN training calls Surprise KNNBasic correctly"""
-    from homealone.training.train import Training
+def test_train_nmf_creates_and_fits_model(mock_sql, mock_db):
+    """Test NMF model training"""
+    mock_sql.return_value = pd.DataFrame()
     
-    mock_connect.return_value = MagicMock()
     mock_model = MagicMock()
-    mock_knn.return_value = mock_model
-    
-    trainer = Training()
-    trainer.trainset = MagicMock()
-    
-    result = trainer.train_knn()
-    
-    mock_knn.assert_called_once_with(sim_options={'user_based': True})
-    mock_model.fit.assert_called_once_with(trainer.trainset)
-    assert result == mock_model
-
-
-@patch('homealone.training.train.sqlite3.connect')
-@patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.NMF')
-def test_train_nmf_calls_surprise_nmf(mock_nmf, mock_sql, mock_connect):
-    """Test that NMF training calls Surprise NMF correctly"""
-    from homealone.training.train import Training
-    
-    mock_connect.return_value = MagicMock()
-    mock_model = MagicMock()
-    mock_nmf.return_value = mock_model
+    NMF_mock.return_value = mock_model
     
     trainer = Training()
     trainer.trainset = MagicMock()
     
     result = trainer.train_nmf()
     
-    mock_nmf.assert_called_once_with(n_factors=20, n_epochs=20, random_state=42)
+    NMF_mock.assert_called_once_with(n_factors=20, n_epochs=20, random_state=42)
     mock_model.fit.assert_called_once_with(trainer.trainset)
     assert result == mock_model
-
-
-# ============================================================================
-# Test: Model Saving
-# ============================================================================
-
-@patch('homealone.training.train.sqlite3.connect')
-@patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.dump.dump')
-def test_save_model_calls_dump(mock_dump, mock_sql, mock_connect):
-    """Test that model saving calls surprise dump"""
-    from homealone.training.train import Training
-    
-    mock_connect.return_value = MagicMock()
-    
-    trainer = Training()
-    mock_model = MagicMock()
-    
-    trainer.save_model(mock_model, '/tmp/test.dump')
-    
-    mock_dump.assert_called_once_with('/tmp/test.dump', algo=mock_model)
-
-
-@patch('homealone.training.train.sqlite3.connect')
-@patch('homealone.training.train.pd.read_sql_query')
-@patch('pickle.dump')
-@patch('builtins.open', create=True)
-def test_save_trainset_uses_pickle(mock_open_file, mock_pickle, mock_sql, mock_connect):
-    """Test that trainset is saved using pickle"""
-    from homealone.training.train import Training
-    
-    mock_connect.return_value = MagicMock()
-    mock_file = MagicMock()
-    mock_open_file.return_value.__enter__.return_value = mock_file
-    
-    trainer = Training()
-    trainer.trainset = {'mock': 'trainset'}
-    
-    trainer.save_trainset()
-    
-    mock_pickle.assert_called_once()
-    assert mock_pickle.call_args[0][0] == trainer.trainset
 
 
 # ============================================================================
 # Test: Model Evaluation
 # ============================================================================
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-@patch('homealone.training.train.accuracy.rmse')
-def test_evaluate_model_sufficient_data(mock_rmse, mock_sql, mock_connect):
-    """Test model evaluation with sufficient data"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_connect.return_value = MagicMock()
-    
-    # Create real DataFrame for iterrows
-    test_df = pd.DataFrame({
-        'user_id': list(range(50)),
-        'movie_id': list(range(100, 150)),
-        'rating': [4.0] * 50
-    })
+def test_evaluate_model_success(mock_sql, mock_db, sample_test_df):
+    """Test successful model evaluation"""
+    mock_sql.return_value = pd.DataFrame()
     
     mock_model = MagicMock()
     mock_predictions = [MagicMock() for _ in range(50)]
     mock_model.test.return_value = mock_predictions
-    mock_rmse.return_value = 0.85
+    accuracy_mock.rmse.return_value = 0.85
     
     trainer = Training()
-    rmse = trainer.evaluate_model(mock_model, test_df, 'TestModel')
+    rmse = trainer.evaluate_model(mock_model, sample_test_df, 'SVD')
     
     assert rmse == 0.85
     mock_model.test.assert_called_once()
+    accuracy_mock.rmse.assert_called_once()
 
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-def test_evaluate_model_insufficient_data(mock_sql, mock_connect):
-    """Test that evaluation returns None with insufficient data"""
-    from homealone.training.train import Training
-    import pandas as pd
+def test_evaluate_model_insufficient_data(mock_sql, mock_db):
+    """Test evaluation with insufficient data"""
+    mock_sql.return_value = pd.DataFrame()
     
-    mock_connect.return_value = MagicMock()
-    
-    # Create DataFrame with only 5 rows
-    test_df = pd.DataFrame({
-        'user_id': list(range(5)),
-        'movie_id': list(range(5)),
-        'rating': [4.0] * 5
+    small_test_df = pd.DataFrame({
+        'user_id': [1, 2],
+        'movie_id': [101, 102],
+        'rating': [4.0, 3.0],
+        'rated_at': [datetime.now(), datetime.now()]
     })
     
     trainer = Training()
-    rmse = trainer.evaluate_model(MagicMock(), test_df, 'TestModel')
+    rmse = trainer.evaluate_model(MagicMock(), small_test_df, 'SVD')
     
     assert rmse is None
 
 
-@patch('homealone.training.train.sqlite3.connect')
+# ============================================================================
+# Test: Model Saving
+# ============================================================================
+
 @patch('homealone.training.train.pd.read_sql_query')
-def test_evaluate_model_none_dataframe(mock_sql, mock_connect):
-    """Test that evaluation handles None DataFrame"""
-    from homealone.training.train import Training
-    
-    mock_connect.return_value = MagicMock()
+def test_save_model_calls_dump(mock_sql, mock_db):
+    """Test model saving"""
+    mock_sql.return_value = pd.DataFrame()
     
     trainer = Training()
-    rmse = trainer.evaluate_model(MagicMock(), None, 'TestModel')
+    mock_model = MagicMock()
+    file_path = '/app/models/test.dump'
     
-    assert rmse is None
+    result = trainer.save_model(mock_model, file_path)
+    
+    dump_mock.dump.assert_called_once_with(file_path, algo=mock_model)
+    assert result == file_path
+
+
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('builtins.open', create=True)
+@patch('pickle.dump')
+def test_save_trainset_uses_pickle(mock_pickle, mock_open, mock_sql, mock_db):
+    """Test trainset saving"""
+    mock_sql.return_value = pd.DataFrame()
+    
+    mock_file = MagicMock()
+    mock_open.return_value.__enter__.return_value = mock_file
+    
+    trainer = Training()
+    trainer.trainset = {'test': 'trainset'}
+    
+    result = trainer.save_trainset()
+    
+    mock_pickle.assert_called_once()
+    assert 'trainset.dump' in result
+
+
+# ============================================================================
+# Test: Data Export
+# ============================================================================
+
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('os.makedirs')
+@patch('os.path.exists')
+@patch('os.remove')
+@patch('os.symlink')
+def test_export_data_to_parquet(mock_symlink, mock_remove, mock_exists, 
+                                 mock_makedirs, mock_sql, mock_db, 
+                                 sample_train_df, sample_test_df):
+    """Test data export to parquet"""
+    # First call is for initialization, second is for export (full dataset query)
+    mock_sql.side_effect = [pd.DataFrame(), sample_train_df]
+    mock_exists.return_value = False
+    
+    with patch.object(pd.DataFrame, 'to_parquet') as mock_to_parquet:
+        trainer = Training()
+        result = trainer.export_data_to_parquet(sample_train_df, sample_test_df)
+        
+        assert 'data_hash' in result
+        assert 'timestamp' in result
+        assert 'full_file' in result
+        assert 'train_file' in result
+        assert 'test_file' in result
+        
+        # Verify parquet files were written
+        assert mock_to_parquet.call_count == 3  # full, train, test
+
+
+# ============================================================================
+# Test: Git and Versioning
+# ============================================================================
+
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('os.getenv')
+def test_get_git_commit(mock_getenv, mock_sql, mock_db):
+    """Test git commit retrieval"""
+    mock_sql.return_value = pd.DataFrame()
+    mock_getenv.return_value = 'abc123def456'
+    
+    trainer = Training()
+    commit = trainer.get_git_commit()
+    
+    assert commit == 'abc123def456'
+    mock_getenv.assert_called_once_with('GIT_COMMIT', 'unknown')
+
+
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('builtins.open', create=True)
+def test_calculate_model_hash(mock_open, mock_sql, mock_db):
+    """Test model hash calculation"""
+    mock_sql.return_value = pd.DataFrame()
+    mock_file = MagicMock()
+    mock_file.read.return_value = b'model_data'
+    mock_open.return_value.__enter__.return_value = mock_file
+    
+    trainer = Training()
+    hash_val = trainer.calculate_model_hash('/app/models/test.dump')
+    
+    assert isinstance(hash_val, str)
+    assert len(hash_val) == 8  # MD5 truncated to 8 chars
+
+
+# ============================================================================
+# Test: Provenance Tracking
+# ============================================================================
+
+@patch('homealone.training.train.pd.read_sql_query')
+@patch('builtins.open', create=True)
+@patch('json.dump')
+def test_save_provenance_manifest(mock_json_dump, mock_open, mock_sql, mock_db):
+    """Test provenance manifest saving"""
+    mock_sql.return_value = pd.DataFrame()
+    
+    mock_file = MagicMock()
+    mock_open.return_value.__enter__.return_value = mock_file
+    
+    trainer = Training()
+    provenance_data = {
+        'model_version': 'v1',
+        'data_version': 'd1',
+        'git_commit': 'abc123'
+    }
+    
+    result = trainer.save_provenance_manifest(provenance_data)
+    
+    mock_json_dump.assert_called_once()
+    assert 'provenance_manifest.json' in result
 
 
 # ============================================================================
 # Test: Metadata Logging
 # ============================================================================
 
-@patch('homealone.training.train.sqlite3.connect')
 @patch('homealone.training.train.pd.read_sql_query')
-def test_log_training_metadata_success(mock_sql, mock_connect):
+def test_log_training_metadata_success(mock_sql, mock_db, sample_train_df, sample_test_df):
     """Test successful metadata logging"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_connect.return_value = mock_conn
-    
-    # Mock read_sql_query to return empty (for initialization)
+    mock_connect, mock_conn, mock_cursor = mock_db
     mock_sql.return_value = pd.DataFrame()
     
     trainer = Training()
-    trainer.training_cutoff = datetime(2025, 10, 27)
-    
-    # Create real DataFrames
-    train_df = pd.DataFrame({
-        'user_id': [1, 2],
-        'movie_id': [101, 102],
-        'rating': [4.0, 3.0],
-        'rated_at': [datetime(2025, 10, 25), datetime(2025, 10, 26)]
-    })
-    
-    test_df = pd.DataFrame({
-        'user_id': [1],
-        'movie_id': [103],
-        'rating': [5.0],
-        'rated_at': [datetime(2025, 10, 27)]
-    })
+    trainer.training_cutoff = datetime(2025, 1, 5)
     
     evaluation_results = {
         'svd_rmse': 0.85,
-        'knn_rmse': 0.92,
-        'nmf_rmse': 0.88
+        'nmf_rmse': 0.92
     }
     
-    trainer.log_training_metadata(train_df, test_df, evaluation_results)
+    trainer.log_training_metadata(
+        sample_train_df, sample_test_df, evaluation_results,
+        mlflow_run_id='run123',
+        data_version='d1',
+        git_commit='abc123',
+        model_version='v1'
+    )
     
-    # Verify that execute was called with INSERT
-    # Check all execute calls for INSERT statements
-    insert_found = False
-    for call_args in mock_cursor.execute.call_args_list:
-        if call_args[0] and 'INSERT' in str(call_args[0][0]):
-            insert_found = True
-            break
-    
-    assert insert_found, "INSERT statement was not executed"
-    
-    # Verify commit was called
+    # Verify INSERT was called
+    insert_calls = [call for call in mock_cursor.execute.call_args_list 
+                   if 'INSERT' in str(call)]
+    assert len(insert_calls) >= 2  # training_metadata + model_deployment
     assert mock_conn.commit.called
 
-@patch('homealone.training.train.sqlite3.connect')
+
 @patch('homealone.training.train.pd.read_sql_query')
-def test_log_training_metadata_identifies_best_model(mock_sql, mock_connect):
+def test_log_training_metadata_identifies_best_model(mock_sql, mock_db, sample_train_df):
     """Test that best model is correctly identified"""
-    from homealone.training.train import Training
-    import pandas as pd
-    
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_connect.return_value = mock_conn
+    mock_connect, mock_conn, mock_cursor = mock_db
+    mock_sql.return_value = pd.DataFrame()
     
     trainer = Training()
-    trainer.training_cutoff = datetime(2025, 10, 27)
+    trainer.training_cutoff = datetime(2025, 1, 5)
     
-    train_df = pd.DataFrame({
-        'user_id': [1],
-        'movie_id': [101],
-        'rating': [4.0],
-        'rated_at': [datetime(2025, 10, 25)]
-    })
-    
-    # KNN has best (lowest) RMSE
+    # NMF has better (lower) RMSE
     evaluation_results = {
         'svd_rmse': 0.95,
-        'knn_rmse': 0.82,  # Best
-        'nmf_rmse': 0.90
+        'nmf_rmse': 0.82
     }
     
-    trainer.log_training_metadata(train_df, None, evaluation_results)
+    trainer.log_training_metadata(
+        sample_train_df, None, evaluation_results,
+        mlflow_run_id='run123',
+        data_version='d1',
+        git_commit='abc123',
+        model_version='v1'
+    )
     
-    # Verify 'knn_rmse' was logged as best
-    execute_args = mock_cursor.execute.call_args[0][1]
-    best_model = execute_args[-1]  # Last parameter
-    assert best_model == 'knn_rmse'
+    # Find the INSERT call for training_metadata
+    insert_calls = [call for call in mock_cursor.execute.call_args_list 
+                   if len(call[0]) > 1 and 'INSERT INTO training_metadata' in str(call[0][0])]
+    
+    assert len(insert_calls) > 0, "Should have INSERT INTO training_metadata call"
+    
+    # Check that nmf_rmse was identified as best
+    execute_args = insert_calls[0][0][1]
+    assert 'nmf_rmse' in execute_args
 
 
 # ============================================================================

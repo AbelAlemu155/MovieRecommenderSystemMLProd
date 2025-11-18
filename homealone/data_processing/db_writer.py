@@ -94,47 +94,75 @@ class DBWriter:
 
     def update_watch_history(self, data):
         cursor = self.conn.cursor()
-        for _, row in data.iterrows():
-            query = f"""
-                INSERT INTO watch_history (user_id, movie_id, total_watch_time, start_time, last_watch)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, movie_id) DO UPDATE SET
-                    total_watch_time = watch_history.total_watch_time + excluded.total_watch_time,
-                    start_time = CASE
-                        WHEN excluded.start_time < watch_history.start_time THEN excluded.start_time
-                        ELSE watch_history.start_time
-                    END,
-                    last_watch = CASE
-                        WHEN excluded.last_watch > watch_history.last_watch THEN excluded.last_watch
-                        ELSE watch_history.last_watch
-                    END;
-            """
-            cursor.execute(query, (
-                row['userid'],
-                row['movieid'],
-                row['minute'],
-                row['start_time'],
-                row['last_watch']
-            ))
+        successful_updates = 0
+        failed_updates = 0
+        
+        for idx, row in data.iterrows():
+            try:
+                query = """
+                    INSERT INTO watch_history (user_id, movie_id, total_watch_time, start_time, last_watch)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, movie_id) DO UPDATE SET
+                        total_watch_time = watch_history.total_watch_time + excluded.total_watch_time,
+                        start_time = CASE
+                            WHEN excluded.start_time < watch_history.start_time THEN excluded.start_time
+                            ELSE watch_history.start_time
+                        END,
+                        last_watch = CASE
+                            WHEN excluded.last_watch > watch_history.last_watch THEN excluded.last_watch
+                            ELSE watch_history.last_watch
+                        END
+                """
+                cursor.execute(query, (
+                    row['userid'],
+                    row['movieid'],
+                    row['minute'],
+                    row['start_time'],
+                    row['last_watch']
+                ))
+                successful_updates += 1
+            except sqlite3.IntegrityError as e:
+                logger.error(f"IntegrityError updating watch history for user {row['userid']}, movie {row['movieid']}: {e}")
+                failed_updates += 1
+            except Exception as e:
+                logger.error(f"Unexpected error updating watch history for user {row['userid']}, movie {row['movieid']}: {e}")
+                failed_updates += 1
+        
         self.conn.commit()
+        logger.info(f"Watch history update complete: {successful_updates} successful, {failed_updates} failed")
 
     def update_ratings(self, data):
         cursor = self.conn.cursor()
-        for _, row in data.iterrows():
-            query = f"""
-                INSERT INTO ratings (user_id, movie_id, rating, rated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id, movie_id) DO UPDATE SET
-                    rating = excluded.rating,
-                    rated_at = excluded.rated_at;
-            """
-            cursor.execute(query, (
-                row['userid'],
-                row['movieid'],
-                row['rating'],
-                row['rated_at']
-            ))
+        successful_updates = 0
+        failed_updates = 0
+        
+        for idx, row in data.iterrows():
+            if idx % 50 == 0:
+                logger.info(f"Processing rating record {idx+1}/{len(data)}")
+            try:
+                query = """
+                    INSERT INTO ratings (user_id, movie_id, rating, rated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(user_id, movie_id) DO UPDATE SET
+                        rating = excluded.rating,
+                        rated_at = excluded.rated_at
+                """
+                cursor.execute(query, (
+                    row['userid'],
+                    row['movieid'],
+                    row['rating'],
+                    row['rated_at']
+                ))
+                successful_updates += 1
+            except sqlite3.IntegrityError as e:
+                logger.error(f"IntegrityError updating rating for user {row['userid']}, movie {row['movieid']}: {e}")
+                failed_updates += 1
+            except Exception as e:
+                logger.error(f"Unexpected error updating rating for user {row['userid']}, movie {row['movieid']}: {e}")
+                failed_updates += 1
+        
         self.conn.commit()
+        logger.info(f"Ratings update complete: {successful_updates} successful, {failed_updates} failed")
 
     def process_files(self):
         """
@@ -187,13 +215,16 @@ class DBWriter:
                         if invalid_records:
                             logger.warning(
                                 f"Found {len(invalid_records)} invalid watch history records")
+                        logger.info(f"Successfully processed {len(valid_records)} valid watch history records from {file}")
 
                     elif 'ratings' in file:
-                       # Aggregate rating data
+                        logger.info(f"Processing ratings file: {file}")
+                        # Aggregate rating data
                         grouped = df.groupby(['userid', 'movieid']).agg(
                             {'time': 'max', 'rating': 'max'}).reset_index()
                         grouped.columns = [
                             'userid', 'movieid', 'rated_at', 'rating']
+                        logger.debug(f"Aggregated {len(grouped)} rating records")
                         # Rename columns to match schema
                         grouped_renamed = grouped.rename(columns={
                             'userid': 'user_id',
@@ -201,8 +232,10 @@ class DBWriter:
                         })
                         # Convert DataFrame to list of dictionaries
                         records_list = grouped_renamed.to_dict('records')
+                        logger.debug(f"Validating {len(records_list)} rating records")
                         valid_records, invalid_records = self.validate_db_data(
                             records_list, RatingRecord)
+                        logger.info(f"Validation complete: {len(valid_records)} valid, {len(invalid_records)} invalid")
                         if valid_records:
                             # Convert validated pydantic models back to DataFrame
                             valid_df = pd.DataFrame(
@@ -212,7 +245,9 @@ class DBWriter:
                                 'user_id': 'userid',
                                 'movie_id': 'movieid'
                             })
+                            logger.info(f"Validation complete: updating {len(valid_df)} rating records to database")
                             self.update_ratings(valid_df)
+                            logger.info(f"Successfully processed {len(valid_records)} valid rating records from {file}")
                         if invalid_records:
                             logger.warning(
                                 f"Found {len(invalid_records)} invalid rating records")
@@ -250,13 +285,6 @@ class DBWriter:
             dict: Validation metrics
         """
         return self.validator.get_stats()
-
-
-   
-
-        
-
-
 
 
 if __name__ == "__main__":

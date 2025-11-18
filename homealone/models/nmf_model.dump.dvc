@@ -1,0 +1,5 @@
+outs:
+- md5: 4abbaa9e6db51c426548a48d1ed4622f
+  size: 359149
+  hash: md5
+  path: nmf_model.dump
