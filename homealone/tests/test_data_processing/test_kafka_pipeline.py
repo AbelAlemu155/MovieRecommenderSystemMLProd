@@ -214,7 +214,7 @@ def test_consume_uses_default_parameters(mock_ensure, mock_consumer_class):
         "movielog10",
         bootstrap_servers="localhost:9092",
         group_id="team10-consumer-group",
-        auto_offset_reset="latest",
+        auto_offset_reset="earliest",
         enable_auto_commit=False
     )
 
