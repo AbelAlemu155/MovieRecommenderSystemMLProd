@@ -8,3 +8,9 @@ scrape_configs:
       - targets: ['monitoring:8000']
         labels:
           service: 'recommendation-monitoring'
+
+  - job_name: 'model-quality'
+    static_configs:
+      - targets: ['model-quality:8001']
+        labels:
+          service: 'model-quality-monitoring'

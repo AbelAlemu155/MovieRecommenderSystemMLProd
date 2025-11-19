@@ -224,6 +224,8 @@ services:
       - TEST_MODE=true
     volumes:
       - ./homealone/db:/app/db
+    ports:
+      - "8001:8001"
     restart: on-failure
     depends_on:
       - monitoring
