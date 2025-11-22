@@ -10,7 +10,11 @@
       "Bash(docker-compose logs:*)",
       "Bash(wsl --exec bash -c \"sudo apt-get update && sudo apt-get install -y sqlite3\")",
       "Bash(wsl --exec bash -c \"sqlite3 --version\")",
-      "Bash(wsl --exec bash:*)"
+      "Bash(wsl --exec bash:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose restart:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,6 @@
 outs:
-- md5: fe8c9128fc7d1aeb1327fbd141053922
-  size: 2929570
+- md5: 90eeddcd79fdb89e7ca21a7222452ccc
+  size: 2684719
   hash: md5
   path: nmf_model.dump
+  isexec: true

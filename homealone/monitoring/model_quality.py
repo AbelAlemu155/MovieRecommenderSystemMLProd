@@ -1,6 +1,6 @@
 import time
 import logging
-from prometheus_client import Gauge
+from prometheus_client import Gauge, start_http_server
 from online_evaluation.online_evaluation import compute_online_measure
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 MODEL_QUALITY_GAUGE = Gauge('model_quality_success_rate', 'Proportion of successful recommendations')
 
 def monitor_model_quality():
+    # Start Prometheus HTTP server on port 8001
+    start_http_server(8001)
+    logger.info("Prometheus metrics server started on port 8001")
     logger.info("Model quality monitoring started")
 
     while True:
