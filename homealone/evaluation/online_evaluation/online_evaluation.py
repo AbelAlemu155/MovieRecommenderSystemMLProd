@@ -42,7 +42,7 @@ def compute_online_measure():
     successful_count = df['recommended_successful'].sum()
 
     logger.info(f"Success proportion: {success_proportion:.4f} ({successful_count}/{len(df)} recommendations)")
-    logger.info(f"Successful recommendations:\n{df[df['recommended_successful']==True]}")
+    # logger.info(f"Successful recommendations:\n{df[df['recommended_successful']==True]}")
 
     return success_proportion
 
