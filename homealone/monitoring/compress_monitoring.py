@@ -206,15 +206,15 @@ def main():
                 group_id='team10-monitor-group',
                 auto_offset_reset='earliest',  # Changed from 'latest' to enable seeking to specific timestamp
                 enable_auto_commit=False,
-                consumer_timeout_ms=10000
+                # consumer_timeout_ms=10000
             )
             logger.info("Successfully connected to Kafka!")
         except NoBrokersAvailable:
             logger.warning("No Kafka brokers available. Retrying in 5 seconds...")
             time.sleep(5)
 
-    # Seek to specific timestamp: November 14, 2025
-    target_date = datetime(2025, 11, 14, 0, 0, 0)  # Midnight on Nov 14, 2025
+    # Seek to specific timestamp: November 20, 2025
+    target_date = datetime(2025, 11, 20, 0, 0, 0)  # Midnight on Nov 20, 2025
     target_timestamp_ms = int(target_date.timestamp() * 1000)  # Convert to milliseconds
 
     logger.info(f"Seeking to timestamp: {target_date} ({target_timestamp_ms}ms)")
@@ -246,7 +246,7 @@ def main():
     else:
         logger.error("No partitions found for topic 'movielog10'")
 
-    logger.info("Starting to consume recommendation requests from November 14, 2025...")
+    logger.info("Starting to consume recommendation requests from November 20, 2025...")
 
     try:
         for message in consumer:
