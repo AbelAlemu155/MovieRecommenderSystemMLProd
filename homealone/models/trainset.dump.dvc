@@ -1,6 +1,5 @@
 outs:
-- md5: a0b4c9bc1d1ca50a87b0ae98b86d11de
-  size: 499977
+- md5: 130fbb2ea7fea5d75c0fe38a175c65d0
+  size: 341548
   hash: md5
   path: trainset.dump
-  isexec: true

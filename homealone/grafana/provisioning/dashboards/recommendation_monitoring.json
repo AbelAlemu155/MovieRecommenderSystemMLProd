@@ -485,6 +485,101 @@
       "type": "timeseries"
     },
     {
+  "type": "timeseries",
+  "title": "Model Quality - A/B testing",
+  "targets": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "model_quality_treatement_group",
+      "legendFormat": "Treatment Success Rate",
+      "refId": "A"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "model_quality_control_group",
+      "legendFormat": "Control Success Rate",
+      "refId": "B"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "t_stat_ab",
+      "legendFormat": "t-statistics measure",
+      "refId": "C"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "p_value_ab",
+      "legendFormat": "p-value measure",
+      "refId": "D"
+    }
+  ],
+  "fieldConfig": {
+    "defaults": {
+      "color": { "mode": "palette-classic" },
+      "custom": {
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "Success Rate",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "drawStyle": "line",
+        "fillOpacity": 20,
+        "gradientMode": "none",
+        "hideFrom": { "tooltip": false, "viz": false, "legend": false },
+        "lineInterpolation": "smooth",
+        "lineWidth": 2,
+        "pointSize": 5,
+        "scaleDistribution": { "type": "linear" },
+        "showPoints": "auto",
+        "spanNulls": false,
+        "stacking": { "group": "A", "mode": "none" },
+        "thresholdsStyle": { "mode": "off" }
+      },
+      "mappings": [],
+      "max": 1,
+      "min": 0,
+      "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+      "unit": "percentunit"
+    },
+    "overrides": [
+      {
+        "matcher": { "id": "byName", "options": "t_stat_ab" },
+        "properties": [
+          { "id": "drawStyle", "value": "points" },
+          { "id": "lineWidth", "value": 0 },
+          { "id": "showPoints", "value": "always" },
+          { "id": "axisPlacement", "value": "right" }
+        ]
+      },
+      {
+        "matcher": { "id": "byName", "options": "p_value_ab" },
+        "properties": [
+          { "id": "drawStyle", "value": "points" },
+          { "id": "lineWidth", "value": 0 },
+          { "id": "showPoints", "value": "always" },
+          { "id": "axisPlacement", "value": "right" }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "legend": {
+      "displayMode": "list",
+      "placement": "bottom",
+      "calcs": ["last"],
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "single",
+      "sort": "none"
+    },
+    "tooltipOptions": {
+      "showAllFields": false
+    }
+  },
+  "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 }
+},
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-datasource"

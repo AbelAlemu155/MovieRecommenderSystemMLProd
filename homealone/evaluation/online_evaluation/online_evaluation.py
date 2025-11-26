@@ -7,21 +7,28 @@
 #  rating history: u_id, movie_id , rating
 
 import logging
-from online_evaluation.snapshot_data import *
+from .snapshot_data import *
 import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def compute_online_measure():
+def compute_online_measure(treatment_group=None):
     logger.info("Starting online measure computation")
 
-    recommendations_df, watch_rating_df = get_snapshot()
+    recommendations_df, watch_rating_df = get_snapshot(treatment_group=treatment_group)
     logger.info(f"Retrieved {len(recommendations_df)} recommendations and {len(watch_rating_df)} watch/rating records")
 
     df = preprocess_snapshot(recommendations_df=recommendations_df,
                              watch_rating_df=watch_rating_df)
+
     logger.info(f"Preprocessed data: {len(df)} total records")
+
+    # Make both timezone-naive
+    df['rated_at'] = pd.to_datetime(df['rated_at'], utc=False).dt.tz_localize(None)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=False).dt.tz_localize(None)
+    df['last_watch'] = pd.to_datetime(df['last_watch'], utc=False).dt.tz_localize(None)
+
     df['recommended_successful'] = df.apply(
     lambda row: (
         pd.notnull(row['rating']) and 
@@ -38,8 +45,12 @@ def compute_online_measure():
     ),
     axis=1
     )
+    
+    
+
     success_proportion = df['recommended_successful'].mean()
     successful_count = df['recommended_successful'].sum()
+    print(successful_count)
 
     logger.info(f"Success proportion: {success_proportion:.4f} ({successful_count}/{len(df)} recommendations)")
     # logger.info(f"Successful recommendations:\n{df[df['recommended_successful']==True]}")
@@ -66,6 +77,7 @@ def _compute_online_measure_from_df(df: pd.DataFrame) -> float:
 
 if __name__== '__main__':
     compute_online_measure()
-
+    # compute_online_measure(treatment_group=True)
+    # compute_online_measure(treatment_group=False)
 
 

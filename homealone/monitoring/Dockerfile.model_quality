@@ -17,6 +17,8 @@ COPY evaluation/online_evaluation/ /app/online_evaluation/
 # Copy model quality script
 COPY monitoring/model_quality.py .
 
+Copy experimentation/  /app/experimentation
+
 # Shared volumes for database and reports
 VOLUME ["/app/db", "/app/reports"]
 

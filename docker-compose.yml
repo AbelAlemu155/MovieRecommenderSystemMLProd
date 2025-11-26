@@ -7,7 +7,7 @@ services:
         - GIT_COMMIT=${GIT_COMMIT:-unknown}
     volumes:
       - ./homealone/models:/app/models
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
     restart: on-failure
     logging:
       driver: "json-file"
@@ -26,7 +26,7 @@ services:
     command: python server.py
     volumes:
       - ./homealone/models:/app/models
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
     ports: 
       - "5011:5000"
     depends_on:
@@ -48,7 +48,7 @@ services:
     command: python server.py
     volumes:
       - ./homealone/models:/app/models
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
     ports: 
       - "5012:5000"
     depends_on:
@@ -70,7 +70,7 @@ services:
     command: python server.py
     volumes:
       - ./homealone/models:/app/models
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
     ports: 
       - "5013:5000"
     depends_on:
@@ -116,7 +116,7 @@ services:
       - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
       - TUNNEL_PORT=${TUNNEL_PORT}
     volumes:
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
       - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
     logging:
@@ -131,7 +131,7 @@ services:
       dockerfile: Dockerfile
     command: python /app/db_writer.py
     volumes:
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
       - ./homealone/data_processing/data_queues:/app/data_queues
     restart: on-failure
     depends_on:
@@ -154,7 +154,7 @@ services:
       - TUNNEL_PASSWORD=${TUNNEL_PASSWORD}
       - TUNNEL_PORT=${TUNNEL_PORT}
     volumes:
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
       - ./homealone/reports:/app/reports
     ports:
       - "8000:8000"
@@ -185,7 +185,7 @@ services:
         max-size: "25m"
         max-file: "3"
     volumes:
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
 
   prometheus:
     image: prom/prometheus:latest
@@ -223,7 +223,7 @@ services:
     environment:
       - TEST_MODE=true
     volumes:
-      - ./homealone/db:/app/db
+      - ./homealone/db:/app/db:rw
     ports:
       - "8001:8001"
     restart: on-failure

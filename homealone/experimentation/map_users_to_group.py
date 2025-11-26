@@ -1,7 +1,7 @@
 
 
 import sqlite3, hashlib
-from constants import *
+from .constants import *
 def pyhash(x):
     return int(hashlib.sha256(str(x).encode()).hexdigest(), 16)
 

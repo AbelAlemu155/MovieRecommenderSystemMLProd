@@ -3,7 +3,7 @@
 import pandas as pd, os
 import sqlite3
 
-# from homealone.experimentation.map_users_to_group import define_hash, pyhash
+from experimentation.map_users_to_group import define_hash, pyhash
 def get_snapshot(treatment_group=None):
     
 
@@ -11,15 +11,17 @@ def get_snapshot(treatment_group=None):
      select * from recommendations ;
     """
     # Use environment variable or default to docker path
-    db_dir = os.getenv("DB_PATH", "/app/db")
-    db_path = os.path.join(db_dir, "home_alone.db")
+    # db_dir = os.getenv("DB_PATH", "/app/db")
 
+    # db_dir = "homealone/db"
+    db_dir= "/app/db"
+    db_path = os.path.join(db_dir, "home_alone.db")
+    
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
     recommendations_df = pd.read_sql_query(query, conn,  parse_dates=['timestamp'] )
+    if(treatment_group is None):
 
-    if(treatment_group is not None):
-        
         query = """
             SELECT 
                 wh.user_id,
@@ -38,54 +40,59 @@ def get_snapshot(treatment_group=None):
                 SELECT user_id FROM recommendations 
             );
             """
+    
 
     elif(treatment_group):
-        conn.create_function("pyhash", 1, pyhash)
-        query = """
-            SELECT 
-                wh.user_id,
-                wh.movie_id,
-                wh.start_time,
-                wh.last_watch,
-                r.rating,
-                m.runtime,
-                r.rated_at
-            FROM watch_history AS wh
-            LEFT JOIN ratings AS r
-                ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
-            LEFT JOIN movies AS m
-                ON wh.movie_id = m.movie_id
-            WHERE wh.user_id IN (
-                SELECT user_id FROM recommendations 
-                WHERE pyhash(wh.user_id) % 100 < 10
-            );
-            """
+        print("treatement group is true")
+        # Load recommendations table
+        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
+        recs_df['pyhash'] = recs_df['user_id'].apply(pyhash)
+        selected_users = recs_df[recs_df['pyhash'] % 100 < 10]['user_id'].tolist()
+
+        # Now filter in SQL with fixed list
+        query = f"""
+        SELECT 
+            wh.user_id,
+            wh.movie_id,
+            wh.start_time,
+            wh.last_watch,
+            r.rating,
+            m.runtime,
+            r.rated_at
+        FROM watch_history AS wh
+        LEFT JOIN ratings AS r
+            ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+        LEFT JOIN movies AS m
+            ON wh.movie_id = m.movie_id
+        WHERE wh.user_id IN ({','.join(map(str, selected_users))});
+        """
+        # print(len(selected_users))
     else:
-        conn.create_function("pyhash", 1, pyhash)
-        query = """
-            SELECT 
-                wh.user_id,
-                wh.movie_id,
-                wh.start_time,
-                wh.last_watch,
-                r.rating,
-                m.runtime,
-                r.rated_at
-            FROM watch_history AS wh
-            LEFT JOIN ratings AS r
-                ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
-            LEFT JOIN movies AS m
-                ON wh.movie_id = m.movie_id
-            WHERE wh.user_id IN (
-                SELECT user_id FROM recommendations 
-                WHERE pyhash(wh.user_id) % 100 > 10
-            );
-            """
-
-
+        print("treatement group is False")
         
+        # Load recommendations table
+        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
+        recs_df['pyhash'] = recs_df['user_id'].apply(pyhash)
+        selected_users = recs_df[recs_df['pyhash'] % 100 >= 10]['user_id'].tolist()
 
-    
+        # Now filter in SQL with fixed list
+        query = f"""
+        SELECT 
+            wh.user_id,
+            wh.movie_id,
+            wh.start_time,
+            wh.last_watch,
+            r.rating,
+            m.runtime,
+            r.rated_at
+        FROM watch_history AS wh
+        LEFT JOIN ratings AS r
+            ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+        LEFT JOIN movies AS m
+            ON wh.movie_id = m.movie_id
+        WHERE wh.user_id IN ({','.join(map(str, selected_users))});
+        """
+        # print(len(selected_users))
 
     # Load result into pandas DataFrame
     watch_rating_df = pd.read_sql_query(query, conn, 
@@ -93,10 +100,10 @@ def get_snapshot(treatment_group=None):
                                          )
 
     
-
+    
+    # print(watch_rating_df[['rated_at']].head)
     # Close the connection
     conn.close()
-
     return recommendations_df, watch_rating_df
 
 

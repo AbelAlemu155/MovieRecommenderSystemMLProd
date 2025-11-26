@@ -264,7 +264,7 @@ class PrometheusExporter:
         except Exception as e:
             logger.error(f"Error updating alert metrics: {e}")
     
-   
+
 
     def update_all_metrics(self):
         """Update all metrics"""
