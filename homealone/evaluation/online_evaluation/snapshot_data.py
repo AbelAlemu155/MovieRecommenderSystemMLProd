@@ -6,7 +6,8 @@ def get_snapshot():
     
 
     query = """
-     select * from recommendations ;
+     SELECT * FROM kafka_recs
+     ORDER BY timestamp ASC;
     """
     # Use environment variable or default to docker path
     db_dir = os.getenv("DB_PATH", "/app/db")
@@ -31,7 +32,7 @@ def get_snapshot():
         LEFT JOIN movies AS m
             ON wh.movie_id = m.movie_id
         WHERE wh.user_id IN (
-            SELECT user_id FROM recommendations
+            SELECT user_id FROM kafka_recs
         );
         """
 
