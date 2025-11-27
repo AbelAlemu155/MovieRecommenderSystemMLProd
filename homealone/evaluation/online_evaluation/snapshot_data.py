@@ -3,7 +3,7 @@
 import pandas as pd, os
 import sqlite3
 
-from experimentation.map_users_to_group import define_hash, pyhash
+from homealone.experimentation.map_users_to_group import define_hash, pyhash
 def get_snapshot(treatment_group=None):
     
     query = "select * from recommendations; "
@@ -93,8 +93,7 @@ def get_snapshot(treatment_group=None):
         
         # Load recommendations table
         # recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
-        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM kafka_recs", conn)
-        recs_df['pyhash'] = recs_df['user_id'].apply(pyhash)
+        
         selected_users = recs_df[recs_df['pyhash'] % 100 >= 10]['user_id'].tolist()
 
         # Now filter in SQL with fixed list
