@@ -3,7 +3,7 @@
 import pandas as pd, os
 import sqlite3
 
-from homealone.experimentation.map_users_to_group import define_hash, pyhash
+from experimentation.map_users_to_group import define_hash, pyhash
 def get_snapshot(treatment_group=None):
     
     query = "select * from recommendations; "
