@@ -341,6 +341,10 @@
       "title": "Successful Requests (200)",
       "type": "stat"
     },
+
+
+
+
     {
       "datasource": {
         "type": "prometheus",
@@ -547,101 +551,9 @@
       "title": "Model Quality - Success Rate Over Time",
       "type": "timeseries"
     },
-    {
-  "type": "timeseries",
-  "title": "Model Quality - A/B testing",
-  "targets": [
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
-      "expr": "model_quality_treatement_group",
-      "legendFormat": "Treatment Success Rate",
-      "refId": "A"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
-      "expr": "model_quality_control_group",
-      "legendFormat": "Control Success Rate",
-      "refId": "B"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
-      "expr": "t_stat_ab",
-      "legendFormat": "t-statistics measure",
-      "refId": "C"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
-      "expr": "p_value_ab",
-      "legendFormat": "p-value measure",
-      "refId": "D"
-    }
-  ],
-  "fieldConfig": {
-    "defaults": {
-      "color": { "mode": "palette-classic" },
-      "custom": {
-        "axisCenteredZero": false,
-        "axisColorMode": "text",
-        "axisLabel": "Success Rate",
-        "axisPlacement": "auto",
-        "barAlignment": 0,
-        "drawStyle": "line",
-        "fillOpacity": 20,
-        "gradientMode": "none",
-        "hideFrom": { "tooltip": false, "viz": false, "legend": false },
-        "lineInterpolation": "smooth",
-        "lineWidth": 2,
-        "pointSize": 5,
-        "scaleDistribution": { "type": "linear" },
-        "showPoints": "auto",
-        "spanNulls": false,
-        "stacking": { "group": "A", "mode": "none" },
-        "thresholdsStyle": { "mode": "off" }
-      },
-      "mappings": [],
-      "max": 1,
-      "min": 0,
-      "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-      "unit": "percentunit"
-    },
-    "overrides": [
-      {
-        "matcher": { "id": "byName", "options": "t_stat_ab" },
-        "properties": [
-          { "id": "drawStyle", "value": "points" },
-          { "id": "lineWidth", "value": 0 },
-          { "id": "showPoints", "value": "always" },
-          { "id": "axisPlacement", "value": "right" }
-        ]
-      },
-      {
-        "matcher": { "id": "byName", "options": "p_value_ab" },
-        "properties": [
-          { "id": "drawStyle", "value": "points" },
-          { "id": "lineWidth", "value": 0 },
-          { "id": "showPoints", "value": "always" },
-          { "id": "axisPlacement", "value": "right" }
-        ]
-      }
-    ]
-  },
-  "options": {
-    "legend": {
-      "displayMode": "list",
-      "placement": "bottom",
-      "calcs": ["last"],
-      "showLegend": true
-    },
-    "tooltip": {
-      "mode": "single",
-      "sort": "none"
-    },
-    "tooltipOptions": {
-      "showAllFields": false
-    }
-  },
-  "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 }
-},
+  
+
+
     {
       "datasource": {
         "type": "prometheus",
@@ -1078,7 +990,111 @@
       ],
       "title": "Total Drift Alerts",
       "type": "stat"
+    },
+
+    
+{
+  "type": "timeseries",
+  "title": "Model Quality - A/B testing",
+  "targets": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "model_quality_treatment_group",
+      "legendFormat": "Treatment Success Rate",
+      "refId": "A"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "model_quality_control_group",
+      "legendFormat": "Control Success Rate",
+      "refId": "B"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "t_stat_ab",
+      "legendFormat": "t-statistics measure",
+      "refId": "C"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-datasource" },
+      "expr": "p_value_ab",
+      "legendFormat": "p-value measure",
+      "refId": "D"
     }
+  ],
+
+  "fieldConfig": {
+    "defaults": {
+      "color": { "mode": "palette-classic" },
+      "unit": "percentunit",
+      "min": 0,
+      "max": 1,
+      "custom": {
+        "axisLabel": "Success Rate",
+        "axisPlacement": "left",
+        "drawStyle": "line",
+        "lineWidth": 2,
+        "showPoints": "auto",
+        "fillOpacity": 20
+      }
+    },
+
+    "overrides": [
+      {
+        "matcher": { "id": "byName", "options": "t-statistics measure" },
+        "properties": [
+          { "id": "unit", "value": "none" },
+          { "id": "min", "value": null },
+          { "id": "max", "value": null },
+          { "id": "custom.axisPlacement", "value": "right" },
+          { "id": "custom.axisLabel", "value": "t-statistic" },
+          { "id": "custom.drawStyle", "value": "line" },
+          { "id": "lineWidth", "value": 2 }
+        ]
+      },
+      {
+        "matcher": { "id": "byName", "options": "Treatment Success Rate" },
+        "properties": [
+          { "id": "reduceOptions.calcs", "value": ["mean"] }
+        ]
+      },
+      {
+        "matcher": { "id": "byName", "options": "Control Success Rate" },
+        "properties": [
+          { "id": "reduceOptions.calcs", "value": ["mean"] }
+        ]
+      },
+      {
+        "matcher": { "id": "byName", "options": "p-value measure" },
+        "properties": [
+          { "id": "unit", "value": "none" },
+          { "id": "min", "value": 0 },
+          { "id": "max", "value": 1 },
+          { "id": "custom.axisPlacement", "value": "right" },
+          { "id": "custom.axisLabel", "value": "p-value" },
+          { "id": "custom.drawStyle", "value": "points" },
+          { "id": "lineWidth", "value": 0 },
+          { "id": "showPoints", "value": "always" }
+        ]
+      }
+    ]
+  },
+
+  "options": {
+    "legend": {
+      "displayMode": "list",
+      "placement": "bottom",
+      "showLegend": true,
+      "calcs": ["last"]
+    },
+    "tooltip": {
+      "mode": "single",
+      "sort": "none"
+    }
+  },
+
+  "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 }
+}
   ],
   "preload": false,
   "refresh": "30s",

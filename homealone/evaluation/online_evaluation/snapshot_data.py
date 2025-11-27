@@ -6,7 +6,7 @@ import sqlite3
 from experimentation.map_users_to_group import define_hash, pyhash
 def get_snapshot(treatment_group=None):
     
-
+    query = "select * from recommendations; "
     query = """
      SELECT * FROM kafka_recs
      ORDER BY timestamp ASC;
@@ -23,30 +23,50 @@ def get_snapshot(treatment_group=None):
     recommendations_df = pd.read_sql_query(query, conn,  parse_dates=['timestamp'] )
     if(treatment_group is None):
 
+        # query = """
+        #     SELECT 
+        #         wh.user_id,
+        #         wh.movie_id,
+        #         wh.start_time,
+        #         wh.last_watch,
+        #         r.rating,
+        #         m.runtime,
+        #         r.rated_at
+        #     FROM watch_history AS wh
+        #     LEFT JOIN ratings AS r
+        #         ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+        #     LEFT JOIN movies AS m
+        #         ON wh.movie_id = m.movie_id
+        #     WHERE wh.user_id IN (
+        #         SELECT user_id FROM recommendations 
+        #     );
+        #     """
+
         query = """
-            SELECT 
-                wh.user_id,
-                wh.movie_id,
-                wh.start_time,
-                wh.last_watch,
-                r.rating,
-                m.runtime,
-                r.rated_at
-            FROM watch_history AS wh
-            LEFT JOIN ratings AS r
-                ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
-            LEFT JOIN movies AS m
-                ON wh.movie_id = m.movie_id
-            WHERE wh.user_id IN (
-                SELECT user_id FROM recommendations 
-            );
-            """
+        SELECT 
+            wh.user_id,
+            wh.movie_id,
+            wh.start_time,
+            wh.last_watch,
+            r.rating,
+            m.runtime,
+            r.rated_at
+        FROM watch_history AS wh
+        LEFT JOIN ratings AS r
+            ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+        LEFT JOIN movies AS m
+            ON wh.movie_id = m.movie_id
+        WHERE wh.user_id IN (
+            SELECT user_id FROM kafka_recs
+        );
+        """
     
 
     elif(treatment_group):
         print("treatement group is true")
         # Load recommendations table
-        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
+        # recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
+        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM kafka_recs", conn)
         recs_df['pyhash'] = recs_df['user_id'].apply(pyhash)
         selected_users = recs_df[recs_df['pyhash'] % 100 < 10]['user_id'].tolist()
 
@@ -72,7 +92,8 @@ def get_snapshot(treatment_group=None):
         print("treatement group is False")
         
         # Load recommendations table
-        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
+        # recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
+        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM kafka_recs", conn)
         recs_df['pyhash'] = recs_df['user_id'].apply(pyhash)
         selected_users = recs_df[recs_df['pyhash'] % 100 >= 10]['user_id'].tolist()
 
@@ -132,21 +153,3 @@ def preprocess_snapshot(recommendations_df, watch_rating_df):
 #     """
 
 
-# query = """
-#         SELECT 
-#             wh.user_id,
-#             wh.movie_id,
-#             wh.start_time,
-#             wh.last_watch,
-#             r.rating,
-#             m.runtime,
-#             r.rated_at
-#         FROM watch_history AS wh
-#         LEFT JOIN ratings AS r
-#             ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
-#         LEFT JOIN movies AS m
-#             ON wh.movie_id = m.movie_id
-#         WHERE wh.user_id IN (
-#             SELECT user_id FROM kafka_recs
-#         );
-#         """
