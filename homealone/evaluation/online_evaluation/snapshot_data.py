@@ -120,3 +120,32 @@ def preprocess_snapshot(recommendations_df, watch_rating_df):
     df["watch_duration_minutes"] = (df["last_watch"] - df["start_time"]).dt.total_seconds() / 60
     df['completion_rate'] = df['watch_duration_minutes'] / df['runtime']
     return df    
+
+
+
+
+
+# query = """
+#      SELECT * FROM kafka_recs
+#      ORDER BY timestamp ASC;
+#     """
+
+
+# query = """
+#         SELECT 
+#             wh.user_id,
+#             wh.movie_id,
+#             wh.start_time,
+#             wh.last_watch,
+#             r.rating,
+#             m.runtime,
+#             r.rated_at
+#         FROM watch_history AS wh
+#         LEFT JOIN ratings AS r
+#             ON wh.user_id = r.user_id AND wh.movie_id = r.movie_id
+#         LEFT JOIN movies AS m
+#             ON wh.movie_id = m.movie_id
+#         WHERE wh.user_id IN (
+#             SELECT user_id FROM kafka_recs
+#         );
+#         """
