@@ -8,7 +8,8 @@ def get_snapshot(treatment_group=None):
     
 
     query = """
-     select * from recommendations ;
+     SELECT * FROM kafka_recs
+     ORDER BY timestamp ASC;
     """
     # Use environment variable or default to docker path
     # db_dir = os.getenv("DB_PATH", "/app/db")

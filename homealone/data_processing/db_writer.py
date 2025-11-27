@@ -9,7 +9,7 @@ from tqdm import tqdm
 # import schema validation manager and schemas
 import logging
 from schema_validation.validator import ValidationManager
-from schema_validation.schemas import WatchHistoryRecord, RatingRecord
+from schema_validation.schemas import WatchHistoryRecord, RatingRecord, RecommendationEvent
 
 # Configure logging
 logging.basicConfig(
@@ -82,6 +82,18 @@ class DBWriter:
             production_countries TEXT,
             status TEXT,
             tagline TEXT
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS kafka_recs (
+                user_id INTEGER,
+                timestamp TEXT,
+                server TEXT,
+                status INTEGER,
+                recommended_items TEXT,
+                responsetime_ms REAL,
+                PRIMARY KEY (user_id, timestamp)
             )
         ''')
 
@@ -164,6 +176,41 @@ class DBWriter:
         self.conn.commit()
         logger.info(f"Ratings update complete: {successful_updates} successful, {failed_updates} failed")
 
+    def update_kafka_recs(self, data):
+        cursor = self.conn.cursor()
+        successful_updates = 0
+        failed_updates = 0
+
+        for idx, row in data.iterrows():
+            try:
+                query = """
+                    INSERT INTO kafka_recs (user_id, timestamp, server, status, recommended_items, responsetime_ms)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, timestamp) DO UPDATE SET
+                        server = excluded.server,
+                        status = excluded.status,
+                        recommended_items = excluded.recommended_items,
+                        responsetime_ms = excluded.responsetime_ms
+                """
+                cursor.execute(query, (
+                    row['userid'],
+                    row['time'],
+                    row['server'],
+                    row['status'],
+                    row['recommendations'],
+                    row['responsetime']
+                ))
+                successful_updates += 1
+            except sqlite3.IntegrityError as e:
+                logger.error(f"IntegrityError updating kafka_recs for user {row['userid']}, time {row['time']}: {e}")
+                failed_updates += 1
+            except Exception as e:
+                logger.error(f"Unexpected error updating kafka_recs for user {row['userid']}, time {row['time']}: {e}")
+                failed_updates += 1
+
+        self.conn.commit()
+        logger.info(f"Kafka recommendations update complete: {successful_updates} successful, {failed_updates} failed")
+
     def process_files(self):
         """
         Process all CSV files in data queue directory and write to database with validation.
@@ -180,7 +227,7 @@ class DBWriter:
         # for file in all_files:
         for file in tqdm(all_files, desc="Processing data files", unit="file"):
             try:
-                if 'movies' in file or 'ratings' in file:
+                if 'movies' in file or 'ratings' in file or 'recommendations' in file:
                     df = pd.read_csv(file)
                     print(f"Processing {file}")
                     if 'movies' in file:
@@ -251,6 +298,26 @@ class DBWriter:
                         if invalid_records:
                             logger.warning(
                                 f"Found {len(invalid_records)} invalid rating records")
+
+                    elif 'recommendations' in file:
+                        logger.info(f"Processing recommendations file: {file}")
+                        # No aggregation needed - each row is a recommendation event
+                        # Convert DataFrame to list of dictionaries for validation
+                        records_list = df.to_dict('records')
+                        logger.debug(f"Validating {len(records_list)} recommendation records")
+                        valid_records, invalid_records = self.validate_db_data(
+                            records_list, RecommendationEvent)
+                        logger.info(f"Validation complete: {len(valid_records)} valid, {len(invalid_records)} invalid")
+                        if valid_records:
+                            # Convert validated pydantic models back to DataFrame
+                            valid_df = pd.DataFrame(
+                                [record.model_dump() for record in valid_records])
+                            logger.info(f"Validation complete: updating {len(valid_df)} recommendation records to database")
+                            self.update_kafka_recs(valid_df)
+                            logger.info(f"Successfully processed {len(valid_records)} valid recommendation records from {file}")
+                        if invalid_records:
+                            logger.warning(
+                                f"Found {len(invalid_records)} invalid recommendation records")
 
                     # Remove file after successful processing
                     try:
