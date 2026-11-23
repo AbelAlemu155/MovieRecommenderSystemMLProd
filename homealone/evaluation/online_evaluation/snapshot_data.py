@@ -5,7 +5,7 @@ import sqlite3
 
 from experimentation.map_users_to_group import define_hash, pyhash
 def get_snapshot(treatment_group=None):
-    
+   
     query = "select * from recommendations; "
     query = """
      SELECT * FROM kafka_recs
@@ -14,12 +14,19 @@ def get_snapshot(treatment_group=None):
     # Use environment variable or default to docker path
     # db_dir = os.getenv("DB_PATH", "/app/db")
 
-    # db_dir = "homealone/db"
-    db_dir= "/app/db"
+    db_dir = "./db"
+    # db_dir= "/app/db"
     db_path = os.path.join(db_dir, "home_alone.db")
-    
+    print(db_path)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
+    tables = conn.execute("""
+    SELECT name
+    FROM sqlite_master
+    WHERE type='table';
+""").fetchall()
+
+    print(tables)
     recommendations_df = pd.read_sql_query(query, conn,  parse_dates=['timestamp'] )
     if(treatment_group is None):
 
@@ -57,8 +64,8 @@ def get_snapshot(treatment_group=None):
         LEFT JOIN movies AS m
             ON wh.movie_id = m.movie_id
         WHERE wh.user_id IN (
-            SELECT user_id FROM kafka_recs
-        );
+            SELECT user_id FROM kafka_recs 
+            );
         """
     
 
@@ -93,7 +100,7 @@ def get_snapshot(treatment_group=None):
         
         # Load recommendations table
         # recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM recommendations", conn)
-        
+        recs_df = pd.read_sql_query("SELECT DISTINCT user_id FROM kafka_recs", conn)
         selected_users = recs_df[recs_df['pyhash'] % 100 >= 10]['user_id'].tolist()
 
         # Now filter in SQL with fixed list

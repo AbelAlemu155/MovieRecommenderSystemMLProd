@@ -383,6 +383,7 @@ class Training:
         logger.info(f"{model_name} RMSE: {rmse:.4f}")
         
         return rmse
+        
     
     def save_provenance_manifest(self, provenance_data):
         """
