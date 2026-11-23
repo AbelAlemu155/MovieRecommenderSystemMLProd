@@ -73,14 +73,3 @@ To run the server locally on port 8082, run: `python src/api/app.py`.
 
 Test API using curl, postman, thunderclient etc (The choice is yours)
 
-## Contact
-If you run into any issues, please reach out to the following people:
-
-- [Mustapha Alaba](malaba@andrew.cmu.edu)
-- [Joseph Fadiji](jfadiji@andrew.cmu.edu)
-- [Philomena Githiri](pgithiri@andrew.cmu.edu)
-- [Abel Jotie](ajotie@andrew.cmu.edu)
-- [Stephen Oduh](soduh@andrew.cmu.edu)
-
-Thank you
-
